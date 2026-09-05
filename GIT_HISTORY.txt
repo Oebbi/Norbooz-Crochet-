@@ -1,3 +1,5 @@
-b240603 (HEAD -> master) Add installation check, smoke tests and submission guidance
+9df999c Add restricted database user and demo data cleanup procedures
+83d6e20 Record local Git history for assessment evidence
+b240603 Add installation check, smoke tests and submission guidance
 df96f63 Add customer accounts, ordering and administrator functions
 38868a2 Initial database, shared layout and public product pages
