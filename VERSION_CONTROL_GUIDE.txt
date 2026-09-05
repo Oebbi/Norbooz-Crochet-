@@ -1,0 +1,9 @@
+VERSION CONTROL EVIDENCE
+This submission folder is initialised as a local Git repository with staged implementation commits.
+Before final submission, the group should create/connect its own GitHub repository and push the commits.
+Suggested commands:
+  git remote add origin <YOUR_GROUP_GITHUB_REPOSITORY_URL>
+  git branch -M main
+  git push -u origin main
+Use regular commits during the remaining development/testing work and retain the GitHub history as evidence.
+Do not place database passwords, real customer data or local backups in the public repository.
