@@ -1,3 +1,5 @@
+a7be778 (HEAD -> master) Complete Assignment 2 implementation and security controls
+7ed4480 Update Git history evidence
 9df999c Add restricted database user and demo data cleanup procedures
 83d6e20 Record local Git history for assessment evidence
 b240603 Add installation check, smoke tests and submission guidance
