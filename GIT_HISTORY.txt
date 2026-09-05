@@ -1,0 +1,3 @@
+b240603 (HEAD -> master) Add installation check, smoke tests and submission guidance
+df96f63 Add customer accounts, ordering and administrator functions
+38868a2 Initial database, shared layout and public product pages
