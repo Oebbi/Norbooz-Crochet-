@@ -62,9 +62,11 @@ INSERT INTO users (full_name,email,password_hash,phone,address,role) VALUES
 ('Norbooz Crochet Owner','admin@norboozcrochet.local','$2y$12$lzDlNIN8ysbWi70ybt0qG.G/lOyBupC4GuDhnslPEQnW51zo2u3j6','0400 000 000','Demo business address','admin');
 
 INSERT INTO products (name,category,description,price,stock_qty,image_path,is_active) VALUES
-('Mini Crochet Bear','Plushies','Soft handmade bear suitable as a small gift or display item.',28.00,6,'assets/images/bear.svg',1),
-('Crochet Bunny','Plushies','Handmade bunny with soft yarn and stitched facial details.',32.00,4,'assets/images/bunny.svg',1),
-('Classic Beanie','Beanies','Warm crochet beanie available in different colours by request.',35.00,5,'assets/images/beanie.svg',1),
-('Baby Blanket','Blankets','Crochet baby blanket made in a simple textured stitch pattern.',65.00,3,'assets/images/blanket.svg',1),
-('Market Tote Bag','Bags','Reusable crochet tote bag for light everyday items.',48.00,2,'assets/images/bag.svg',1),
-('Granny Square Throw','Throws','Decorative crochet throw assembled from colourful granny squares.',95.00,1,'assets/images/throw.svg',1);
+('Crochet Capybara','Plushies','Soft handmade capybara plushie with stitched facial details.',32.00,5,'assets/images/products/demo-plushie.svg',1),
+('Granny Square Throw','Throws','Decorative granny-square throw for a sofa, chair or thoughtful gift.',95.00,2,'assets/images/products/demo-throw.svg',1),
+('Granny Square Tote','Bags','Reusable crochet tote bag with a colourful handmade finish.',48.00,4,'assets/images/products/demo-bag.svg',1),
+('Ribbed Crochet Beanie','Hats','Warm crochet beanie that can be made in different colours.',35.00,6,'assets/images/products/demo-hat.svg',1),
+('Mini Flower Keychain','Keychains','Small crochet flower keychain for bags, keys and gifts.',14.00,10,'assets/images/products/demo-keychain.svg',1),
+('Crochet Tulip Bouquet','Flowers','Handmade crochet tulip arrangement designed as a lasting gift.',42.00,3,'assets/images/products/demo-flower.svg',1),
+('Boho Crochet Wall Hanging','Wall Hangings','Textured decorative wall hanging for a warm handmade interior.',58.00,2,'assets/images/products/demo-wall-hanging.svg',1),
+('Flower Coaster Set','Coasters','Set of handmade crochet flower coasters for table styling and gifts.',24.00,8,'assets/images/products/demo-coasters.svg',1);

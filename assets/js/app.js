@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
   // Order page: calculate an estimated total in the browser for convenience.
-  // The PHP server recalculates the authoritative total before saving the order.
+  // PHP recalculates the authoritative total before saving the order.
   const orderForm = document.getElementById('order-form');
   const total = document.getElementById('estimated-total');
 
@@ -20,28 +20,5 @@ document.addEventListener('DOMContentLoaded', () => {
       input.addEventListener('input', updateTotal);
     });
     updateTotal();
-  }
-
-  // Product page: simple client-side search. No customer data is transmitted.
-  const search = document.getElementById('product-search');
-  const grid = document.getElementById('product-grid');
-  const noResults = document.getElementById('no-search-results');
-
-  if (search && grid) {
-    const cards = [...grid.querySelectorAll('.product-card')];
-    const filterProducts = () => {
-      const term = search.value.trim().toLowerCase();
-      let visible = 0;
-
-      cards.forEach((card) => {
-        const match = !term || (card.dataset.search || '').includes(term);
-        card.classList.toggle('hidden', !match);
-        if (match) visible += 1;
-      });
-
-      if (noResults) noResults.classList.toggle('hidden', visible !== 0);
-    };
-
-    search.addEventListener('input', filterProducts);
   }
 });

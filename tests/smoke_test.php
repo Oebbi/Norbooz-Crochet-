@@ -11,7 +11,10 @@ $tests['Valid order status accepted'] = is_valid_order_status('ready') === true;
 $tests['Invalid order status rejected'] = is_valid_order_status('unknown') === false;
 $tests['Money formatted'] = money(12.5) === '$12.50';
 $tests['Safe local image accepted'] = safe_product_image_path('assets/images/bear.svg') === 'assets/images/bear.svg';
+$tests['Nested product photo accepted'] = safe_product_image_path('assets/images/products/capybara.jpg') === 'assets/images/products/capybara.jpg';
 $tests['Unsafe image path replaced'] = safe_product_image_path('https://example.com/a.png') === 'assets/images/product-placeholder.svg';
+$tests['Final category list contains eight families'] = count(product_categories()) === 8;
+$tests['Old Beanies category maps to Hats'] = canonical_product_category('Beanies') === 'Hats';
 
 $failed = 0;
 foreach ($tests as $name => $ok) {

@@ -23,8 +23,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (mb_strlen($name) < 2 || mb_strlen($name) > 120) {
                 throw new RuntimeException('Product name must be between 2 and 120 characters.');
             }
-            if ($category === '' || mb_strlen($category) > 80) {
-                throw new RuntimeException('Enter a category of 80 characters or fewer.');
+            if (!in_array($category, product_categories(), true)) {
+                throw new RuntimeException('Choose one of the approved Norbooz Crochet product families.');
             }
             if ($description === '' || mb_strlen($description) > 500) {
                 throw new RuntimeException('Enter a description of 500 characters or fewer.');
@@ -178,11 +178,11 @@ page_header('Admin Panel');
         <input type="hidden" name="action" value="add_product">
 
         <div><label for="name">Name</label><input id="name" name="name" maxlength="120" required></div>
-        <div><label for="category">Category</label><input id="category" name="category" maxlength="80" required></div>
+        <div><label for="category">Product family</label><select id="category" name="category" required><option value="">Choose category</option><?php foreach (product_categories() as $categoryOption): ?><option value="<?= e($categoryOption) ?>"><?= e($categoryOption) ?></option><?php endforeach; ?></select></div>
         <div><label for="price">Price ($)</label><input id="price" type="number" step="0.01" min="0" max="999999.99" name="price" required></div>
         <div><label for="stock_qty">Stock</label><input id="stock_qty" type="number" min="0" max="100000" name="stock_qty" required></div>
         <div class="full"><label for="description">Description</label><textarea id="description" name="description" rows="3" maxlength="500" required></textarea></div>
-        <div class="full"><label for="image_path">Image path</label><input id="image_path" name="image_path" value="assets/images/product-placeholder.svg"><span class="hint">Use a local file such as assets/images/bear.svg</span></div>
+        <div class="full"><label for="image_path">Image path</label><input id="image_path" name="image_path" value="assets/images/product-placeholder.svg"><span class="hint">For real photos, copy the image to assets/images/products/ and enter a path such as assets/images/products/capybara.jpg</span></div>
         <div class="full checkbox-row"><label class="checkbox"><input type="checkbox" name="is_active" checked> Active product</label></div>
         <div class="full"><button class="button" type="submit">Add product</button></div>
     </form>
@@ -207,8 +207,13 @@ page_header('Admin Panel');
                 <label for="p-name-<?= (int)$product['product_id'] ?>">Name</label>
                 <input id="p-name-<?= (int)$product['product_id'] ?>" name="name" maxlength="120" value="<?= e($product['name']) ?>" required>
 
-                <label for="p-category-<?= (int)$product['product_id'] ?>">Category</label>
-                <input id="p-category-<?= (int)$product['product_id'] ?>" name="category" maxlength="80" value="<?= e($product['category']) ?>" required>
+                <label for="p-category-<?= (int)$product['product_id'] ?>">Product family</label>
+                <select id="p-category-<?= (int)$product['product_id'] ?>" name="category" required>
+                    <?php $currentCategory = canonical_product_category((string)$product['category']); ?>
+                    <?php foreach (product_categories() as $categoryOption): ?>
+                        <option value="<?= e($categoryOption) ?>" <?= $currentCategory === $categoryOption ? 'selected' : '' ?>><?= e($categoryOption) ?></option>
+                    <?php endforeach; ?>
+                </select>
 
                 <label for="p-description-<?= (int)$product['product_id'] ?>">Description</label>
                 <textarea id="p-description-<?= (int)$product['product_id'] ?>" name="description" rows="3" maxlength="500" required><?= e($product['description']) ?></textarea>

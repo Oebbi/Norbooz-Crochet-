@@ -149,10 +149,76 @@ function money(float|string $amount): string
     return '$' . number_format((float)$amount, 2);
 }
 
+/**
+ * The eight product families used consistently across the redesigned shop.
+ */
+function product_categories(): array
+{
+    return [
+        'Plushies',
+        'Throws',
+        'Bags',
+        'Hats',
+        'Keychains',
+        'Flowers',
+        'Wall Hangings',
+        'Coasters',
+    ];
+}
+
+/**
+ * Converts older proposal/demo labels into the final product-family names.
+ * This keeps existing database rows usable without requiring a schema change.
+ */
+function canonical_product_category(string $category): string
+{
+    $category = trim($category);
+    $map = [
+        'Beanies' => 'Hats',
+        'Beanie' => 'Hats',
+        'Hats & Beanies' => 'Hats',
+        'Blankets' => 'Throws',
+        'Blanket' => 'Throws',
+        'Throws & Blankets' => 'Throws',
+        'Wall Hangers' => 'Wall Hangings',
+        'Wall Hanger' => 'Wall Hangings',
+        'Coaster' => 'Coasters',
+        'Flower' => 'Flowers',
+        'Keychain' => 'Keychains',
+    ];
+
+    return $map[$category] ?? $category;
+}
+
+/**
+ * Database values that belong to a selected final product family.
+ */
+function category_database_values(string $category): array
+{
+    return match ($category) {
+        'Hats' => ['Hats', 'Beanies', 'Beanie', 'Hats & Beanies'],
+        'Throws' => ['Throws', 'Blankets', 'Blanket', 'Throws & Blankets'],
+        'Wall Hangings' => ['Wall Hangings', 'Wall Hangers', 'Wall Hanger'],
+        'Coasters' => ['Coasters', 'Coaster'],
+        'Flowers' => ['Flowers', 'Flower'],
+        'Keychains' => ['Keychains', 'Keychain'],
+        default => [$category],
+    };
+}
+
+function category_url(string $category): string
+{
+    return url('products.php?category=' . rawurlencode($category));
+}
+
+/**
+ * Allow local product images only. Subfolders such as assets/images/products/
+ * are supported, but traversal and remote URLs are rejected.
+ */
 function safe_product_image_path(string $path): string
 {
-    $path = trim($path);
-    if (preg_match('#^assets/images/[A-Za-z0-9._-]+\.(svg|png|jpe?g|gif|webp)$#i', $path)) {
+    $path = trim(str_replace('\\', '/', $path));
+    if (preg_match('#^assets/images(?:/[A-Za-z0-9._-]+)+\.(svg|png|jpe?g|gif|webp)$#i', $path)) {
         return $path;
     }
     return 'assets/images/product-placeholder.svg';
@@ -206,6 +272,7 @@ function page_header(string $title): void
 {
     $user = current_user();
     $fullTitle = $title . ' | ' . APP_NAME;
+    $searchValue = trim((string)($_GET['q'] ?? ''));
 
     echo '<!doctype html><html lang="en"><head><meta charset="utf-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
@@ -213,33 +280,54 @@ function page_header(string $title): void
     echo '<title>' . e($fullTitle) . '</title>';
     echo '<link rel="stylesheet" href="' . e(url('assets/css/styles.css')) . '">';
     echo '</head><body><a class="skip-link" href="#main">Skip to main content</a>';
-    echo '<header class="site-header"><div class="container nav-wrap">';
-    echo '<a class="brand" href="' . e(url('index.php')) . '">Norbooz Crochet</a>';
-    echo '<nav aria-label="Primary navigation">';
-    echo '<a href="' . e(url('index.php')) . '">Home</a>';
-    echo '<a href="' . e(url('products.php')) . '">Products</a>';
 
+    echo '<div class="announcement-bar">Handmade in small batches <span aria-hidden="true">•</span> Custom orders welcome <span aria-hidden="true">•</span> Local academic prototype</div>';
+    echo '<header class="site-header">';
+    echo '<div class="container header-main">';
+    echo '<a class="brand" href="' . e(url('index.php')) . '"><span class="brand-mark" aria-hidden="true">N</span><span><strong>Norbooz</strong><small>Crochet</small></span></a>';
+
+    echo '<form class="header-search" method="get" action="' . e(url('products.php')) . '" role="search">';
+    echo '<label class="sr-only" for="site-search">Search products</label>';
+    echo '<input id="site-search" type="search" name="q" value="' . e($searchValue) . '" placeholder="Search handmade crochet..." maxlength="80">';
+    echo '<button type="submit" aria-label="Search">Search</button>';
+    echo '</form>';
+
+    echo '<nav class="account-nav" aria-label="Account navigation">';
     if ($user) {
         if ($user['role'] === 'admin') {
-            echo '<a href="' . e(url('admin.php')) . '">Admin Panel</a>';
+            echo '<a href="' . e(url('admin.php')) . '">Admin</a>';
         } else {
-            echo '<a href="' . e(url('order.php')) . '">Place Order</a>';
-            echo '<a href="' . e(url('my_orders.php')) . '">My Orders</a>';
+            echo '<a href="' . e(url('my_orders.php')) . '">My orders</a>';
         }
-        echo '<span class="nav-user">Hello, ' . e($user['full_name']) . '</span>';
+        echo '<span class="nav-user">Hi, ' . e($user['full_name']) . '</span>';
         echo '<form class="nav-logout" method="post" action="' . e(url('logout.php')) . '">' . csrf_input() . '<button class="nav-link-button" type="submit">Logout</button></form>';
     } else {
         echo '<a href="' . e(url('register.php')) . '">Register</a>';
-        echo '<a href="' . e(url('login.php')) . '">Login</a>';
+        echo '<a class="header-login" href="' . e(url('login.php')) . '">Sign in</a>';
     }
+    echo '</nav></div>';
 
-    echo '</nav></div></header><main id="main" class="container main-content">';
+    echo '<div class="category-nav-wrap"><div class="container category-nav" aria-label="Shop categories">';
+    echo '<a href="' . e(url('index.php')) . '">Home</a>';
+    echo '<a href="' . e(url('products.php')) . '">All products</a>';
+    foreach (product_categories() as $category) {
+        echo '<a href="' . e(category_url($category)) . '">' . e($category) . '</a>';
+    }
+    if ($user && $user['role'] === 'customer') {
+        echo '<a class="category-nav-order" href="' . e(url('order.php')) . '">Place order</a>';
+    }
+    echo '</div></div></header>';
+
+    echo '<main id="main" class="container main-content">';
     echo render_flash();
 }
 
 function page_footer(): void
 {
-    echo '</main><footer class="site-footer"><div class="container">';
-    echo '<p>&copy; ' . date('Y') . ' Norbooz Crochet. ICT312 academic prototype. No online payment-card data is collected.</p>';
-    echo '</div></footer><script src="' . e(url('assets/js/app.js')) . '"></script></body></html>';
+    echo '</main><footer class="site-footer"><div class="container footer-grid">';
+    echo '<div><div class="footer-brand">Norbooz Crochet</div><p>Handmade crochet products presented through a secure ICT312 web information system.</p></div>';
+    echo '<div><strong>Shop</strong><div class="footer-links"><a href="' . e(url('products.php')) . '">All products</a><a href="' . e(category_url('Plushies')) . '">Plushies</a><a href="' . e(category_url('Bags')) . '">Bags</a><a href="' . e(category_url('Flowers')) . '">Flowers</a></div></div>';
+    echo '<div><strong>Account</strong><div class="footer-links"><a href="' . e(url('register.php')) . '">Register</a><a href="' . e(url('login.php')) . '">Login</a></div></div>';
+    echo '</div><div class="container footer-bottom"><p>&copy; ' . date('Y') . ' Norbooz Crochet. ICT312 academic prototype. No online payment-card data is collected.</p></div>';
+    echo '</footer><script src="' . e(url('assets/js/app.js')) . '"></script></body></html>';
 }
