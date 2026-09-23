@@ -218,10 +218,49 @@ function category_url(string $category): string
 function safe_product_image_path(string $path): string
 {
     $path = trim(str_replace('\\', '/', $path));
-    if (preg_match('#^assets/images(?:/[A-Za-z0-9._-]+)+\.(svg|png|jpe?g|gif|webp)$#i', $path)) {
+    if (preg_match('#^assets/images(?:/[A-Za-z0-9 ._-]+)+\.(svg|png|jpe?g|gif|webp)$#i', $path)) {
         return $path;
     }
     return 'assets/images/product-placeholder.svg';
+}
+
+function ensure_custom_requests_table(): void
+{
+    db()->exec(
+        "CREATE TABLE IF NOT EXISTS custom_requests (
+            request_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            request_type VARCHAR(100) NOT NULL,
+            title VARCHAR(120) NOT NULL,
+            description TEXT NOT NULL,
+            color_preferences VARCHAR(500) NOT NULL,
+            size_details VARCHAR(120) NOT NULL,
+            quantity INT UNSIGNED NOT NULL DEFAULT 1,
+            budget DECIMAL(10,2) NULL,
+            needed_by DATE NULL,
+            phone VARCHAR(30) NOT NULL,
+            delivery_address VARCHAR(255) NOT NULL,
+            inspiration_path VARCHAR(255) NULL,
+            status ENUM('new','reviewing','quoted','accepted','declined') NOT NULL DEFAULT 'new',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_custom_requests_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON UPDATE CASCADE ON DELETE RESTRICT
+        ) ENGINE=InnoDB"
+    );
+}
+
+function ensure_password_resets_table(): void
+{
+    db()->exec(
+        "CREATE TABLE IF NOT EXISTS password_resets (
+            reset_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL,
+            token_hash CHAR(64) NOT NULL UNIQUE,
+            expires_at DATETIME NOT NULL,
+            used_at DATETIME NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT fk_password_resets_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON UPDATE CASCADE ON DELETE CASCADE
+        ) ENGINE=InnoDB"
+    );
 }
 
 function login_key(string $email): string
@@ -278,45 +317,37 @@ function page_header(string $title): void
     echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
     echo '<meta name="description" content="Norbooz Crochet handmade products and order management">';
     echo '<title>' . e($fullTitle) . '</title>';
-    echo '<link rel="stylesheet" href="' . e(url('assets/css/styles.css')) . '">';
+    $stylePath = __DIR__ . '/../assets/css/styles.css';
+    $styleVersion = is_file($stylePath) ? (string)filemtime($stylePath) : '1';
+    echo '<link rel="stylesheet" href="' . e(url('assets/css/styles.css?v=' . $styleVersion)) . '">';
     echo '</head><body><a class="skip-link" href="#main">Skip to main content</a>';
 
-    echo '<div class="announcement-bar">Handmade in small batches <span aria-hidden="true">•</span> Custom orders welcome <span aria-hidden="true">•</span> Local academic prototype</div>';
-    echo '<header class="site-header">';
-    echo '<div class="container header-main">';
-    echo '<a class="brand" href="' . e(url('index.php')) . '"><span class="brand-mark" aria-hidden="true">N</span><span><strong>Norbooz</strong><small>Crochet</small></span></a>';
+    echo '<header class="site-header site-hero-shell">';
+    echo '<div class="container header-utility">';
 
-    echo '<form class="header-search" method="get" action="' . e(url('products.php')) . '" role="search">';
-    echo '<label class="sr-only" for="site-search">Search products</label>';
-    echo '<input id="site-search" type="search" name="q" value="' . e($searchValue) . '" placeholder="Search handmade crochet..." maxlength="80">';
-    echo '<button type="submit" aria-label="Search">Search</button>';
-    echo '</form>';
+    echo '<div class="brand-row">';
+    echo '<a class="brand" href="' . e(url('index.php')) . '"><span class="brand-mark" aria-hidden="true">N</span><span class="brand-text"><strong>Norbooz.Crochet</strong></span></a>';
+    echo '</div>';
 
-    echo '<nav class="account-nav" aria-label="Account navigation">';
+    echo '<nav class="main-nav" aria-label="Main navigation">';
+    echo '<a href="' . e(url('index.php')) . '">Home</a>';
+    echo '<a href="' . e(url('index.php')) . '#collections">Collections</a>';
+    echo '<a href="' . e(url('products.php')) . '">Customization</a>';
+    echo '<a href="' . e(url('contact.php')) . '">About</a>';
+    echo '<a href="' . e(url('contact.php')) . '">Contact</a>';
+    echo '</nav>';
+
+    echo '<div class="header-side-right account-nav" aria-label="User actions">';
     if ($user) {
-        if ($user['role'] === 'admin') {
-            echo '<a href="' . e(url('admin.php')) . '">Admin</a>';
-        } else {
-            echo '<a href="' . e(url('my_orders.php')) . '">My orders</a>';
-        }
         echo '<span class="nav-user">Hi, ' . e($user['full_name']) . '</span>';
         echo '<form class="nav-logout" method="post" action="' . e(url('logout.php')) . '">' . csrf_input() . '<button class="nav-link-button" type="submit">Logout</button></form>';
     } else {
-        echo '<a href="' . e(url('register.php')) . '">Register</a>';
-        echo '<a class="header-login" href="' . e(url('login.php')) . '">Sign in</a>';
+        echo '<a class="login-pill" href="' . e(url('register.php')) . '">Register</a>';
+        echo '<a class="login-pill" href="' . e(url('login.php')) . '">Log in</a>';
     }
-    echo '</nav></div>';
-
-    echo '<div class="category-nav-wrap"><div class="container category-nav" aria-label="Shop categories">';
-    echo '<a href="' . e(url('index.php')) . '">Home</a>';
-    echo '<a href="' . e(url('products.php')) . '">All products</a>';
-    foreach (product_categories() as $category) {
-        echo '<a href="' . e(category_url($category)) . '">' . e($category) . '</a>';
-    }
-    if ($user && $user['role'] === 'customer') {
-        echo '<a class="category-nav-order" href="' . e(url('order.php')) . '">Place order</a>';
-    }
-    echo '</div></div></header>';
+    echo '</div>';
+    echo '</div>';
+    echo '</header>';
 
     echo '<main id="main" class="container main-content">';
     echo render_flash();
@@ -326,8 +357,8 @@ function page_footer(): void
 {
     echo '</main><footer class="site-footer"><div class="container footer-grid">';
     echo '<div><div class="footer-brand">Norbooz Crochet</div><p>Handmade crochet products presented through a secure ICT312 web information system.</p></div>';
-    echo '<div><strong>Shop</strong><div class="footer-links"><a href="' . e(url('products.php')) . '">All products</a><a href="' . e(category_url('Plushies')) . '">Plushies</a><a href="' . e(category_url('Bags')) . '">Bags</a><a href="' . e(category_url('Flowers')) . '">Flowers</a></div></div>';
-    echo '<div><strong>Account</strong><div class="footer-links"><a href="' . e(url('register.php')) . '">Register</a><a href="' . e(url('login.php')) . '">Login</a></div></div>';
+    echo '<div><strong>Shop</strong><div class="footer-links"><a href="' . e(url('index.php')) . '#collections">Collections</a><a href="' . e(url('products.php')) . '">Customization</a><a href="' . e(category_url('Plushies')) . '">Plushies</a><a href="' . e(category_url('Bags')) . '">Bags</a></div></div>';
+    echo '<div><strong>Account</strong><div class="footer-links"><a href="' . e(url('register.php')) . '">Register</a><a href="' . e(url('login.php')) . '">Login</a><a href="' . e(url('contact.php')) . '">Contact</a></div></div>';
     echo '</div><div class="container footer-bottom"><p>&copy; ' . date('Y') . ' Norbooz Crochet. ICT312 academic prototype. No online payment-card data is collected.</p></div>';
     echo '</footer><script src="' . e(url('assets/js/app.js')) . '"></script></body></html>';
 }

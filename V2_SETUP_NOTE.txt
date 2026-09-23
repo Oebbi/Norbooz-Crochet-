@@ -1,0 +1,10 @@
+NORBOOZ CROCHET V2 - SIDE-BY-SIDE COPY
+
+Folder name: norbooz_crochet_v2
+Browser URL: http://localhost/norbooz_crochet_v2/
+
+This copy is configured with BASE_URL=/norbooz_crochet_v2 so it can sit beside the old norbooz_crochet folder in C:\xampp\htdocs.
+
+By default it uses the same database name configured in config/config.php (currently norbooz_crochet_db). If your working database is norbooz_crochet_fresh, change only DB_NAME in config/config.php to norbooz_crochet_fresh.
+
+The old and V2 websites can share one database for comparison. Changes to products/orders in one version will then also appear in the other version.

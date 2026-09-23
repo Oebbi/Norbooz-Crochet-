@@ -15,7 +15,7 @@ PRODUCT FAMILIES
 8. Coasters
 
 SAFEST WAY TO USE THIS UPDATE
-1. Back up C:\xampp\htdocs\norbooz_crochet first.
+1. Back up C:\xampp\htdocs\norbooz_crochet_v2 first.
 2. If your existing website and database already work, use the FRONTEND/PRESENTATION PATCH ZIP supplied with this project rather than replacing config.php or your database.
 3. Keep your current config/config.php, especially if your active database is named norbooz_crochet_fresh.
 4. After copying the redesigned files, restart Apache if necessary and press Ctrl+F5 in the browser.

@@ -6,7 +6,13 @@ define('DB_NAME', 'norbooz_crochet_db');
 define('DB_USER', 'root');
 define('DB_PASS', '');
 define('APP_NAME', 'Norbooz Crochet');
-define('BASE_URL', '/norbooz_crochet');
+
+$scriptName = $_SERVER['SCRIPT_NAME'] ?? '/index.php';
+$basePath = dirname($scriptName);
+if ($basePath === '/' || $basePath === '.' || $basePath === '\\') {
+    $basePath = '';
+}
+define('BASE_URL', $basePath);
 
 function db(): PDO
 {

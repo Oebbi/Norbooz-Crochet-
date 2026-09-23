@@ -18,8 +18,8 @@ Additional support files include logout.php, install_check.php, configuration he
 SQL database scripts, CSS, JavaScript, images, tests and Git version-control history.
 
 QUICK INSTALL IN XAMPP (WINDOWS)
-1. Extract/copy the folder named norbooz_crochet into:
-      C:\xampp\htdocs\norbooz_crochet
+1. Extract/copy the folder named norbooz_crochet_v2 into:
+      C:\xampp\htdocs\norbooz_crochet_v2
 2. Open XAMPP Control Panel and start Apache and MySQL.
 3. Open phpMyAdmin in the browser:
       http://localhost/phpmyadmin
@@ -32,10 +32,10 @@ QUICK INSTALL IN XAMPP (WINDOWS)
       password: blank
    If your XAMPP MySQL credentials are different, edit config/config.php.
 6. Open:
-      http://localhost/norbooz_crochet/install_check.php
+      http://localhost/norbooz_crochet_v2/install_check.php
    Every check should show PASS.
 7. Open the working system:
-      http://localhost/norbooz_crochet/
+      http://localhost/norbooz_crochet_v2/
 
 DEMO ADMINISTRATOR
 Email:    admin@norboozcrochet.local

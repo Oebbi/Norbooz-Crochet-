@@ -30,7 +30,7 @@ page_header('My Orders');
     <div class="empty-state">
         <h2>No orders yet</h2>
         <p>Browse the product catalogue and place your first order.</p>
-        <a class="button" href="<?= e(url('products.php')) ?>">Browse products</a>
+        <a class="button" href="<?= e(url('products.php')) ?>">Request a custom piece</a>
     </div>
 <?php else: ?>
     <div class="table-wrap">

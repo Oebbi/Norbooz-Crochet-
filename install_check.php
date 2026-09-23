@@ -10,7 +10,7 @@ try {
     $pdo = db();
     $checks[] = ['Database connection', true];
 
-    foreach (['users', 'products', 'orders', 'order_items'] as $table) {
+    foreach (['users', 'products', 'orders', 'order_items', 'custom_requests', 'password_resets'] as $table) {
         $pdo->query('SELECT 1 FROM ' . $table . ' LIMIT 1');
         $checks[] = ['Table: ' . $table, true];
     }

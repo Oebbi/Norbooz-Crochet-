@@ -5,6 +5,12 @@ require_admin();
 $pdo = db();
 $errors = [];
 
+try {
+    ensure_custom_requests_table();
+} catch (Throwable $ex) {
+    $errors[] = 'Custom requests are unavailable until the latest database schema is imported.';
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
     $action = (string)($_POST['action'] ?? '');
@@ -122,6 +128,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('admin.php');
         }
 
+        if ($action === 'update_custom_request') {
+            $requestId = (int)($_POST['request_id'] ?? 0);
+            $status = (string)($_POST['status'] ?? '');
+            if ($requestId <= 0 || !in_array($status, ['new', 'reviewing', 'quoted', 'accepted', 'declined'], true)) {
+                throw new RuntimeException('Invalid custom request status update.');
+            }
+
+            $stmt = $pdo->prepare('UPDATE custom_requests SET status = ? WHERE request_id = ?');
+            $stmt->execute([$status, $requestId]);
+            flash('success', 'Custom request #' . $requestId . ' updated to ' . ucwords($status) . '.');
+            redirect('admin.php');
+        }
+
         throw new RuntimeException('Unknown administrator action.');
     } catch (Throwable $ex) {
         if ($pdo->inTransaction()) {
@@ -137,6 +156,7 @@ $summary = [
     'active_products' => (int)$pdo->query('SELECT COUNT(*) FROM products WHERE is_active = 1')->fetchColumn(),
     'low_stock' => (int)$pdo->query('SELECT COUNT(*) FROM products WHERE is_active = 1 AND stock_qty <= 2')->fetchColumn(),
     'pending_orders' => (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE status IN ('pending','in_progress')")->fetchColumn(),
+    'new_custom_requests' => (int)$pdo->query("SELECT COUNT(*) FROM custom_requests WHERE status IN ('new','reviewing')")->fetchColumn(),
 ];
 
 $products = $pdo->query('SELECT * FROM products ORDER BY product_id DESC')->fetchAll();
@@ -152,11 +172,18 @@ $orderSql = "SELECT o.order_id, o.order_date, o.status, o.total_amount, o.phone,
             ORDER BY o.order_date DESC, o.order_id DESC";
 $orders = $pdo->query($orderSql)->fetchAll();
 
+$customRequests = $pdo->query(
+    'SELECT cr.*, u.full_name, u.email
+     FROM custom_requests cr
+     JOIN users u ON u.user_id = cr.user_id
+     ORDER BY cr.created_at DESC, cr.request_id DESC'
+)->fetchAll();
+
 page_header('Admin Panel');
 ?>
 <section class="page-heading">
     <h1>Administrator Panel</h1>
-    <p>Manage product details, stock, availability and customer order status.</p>
+    <p>Manage products, customer orders and custom crochet requests.</p>
 </section>
 
 <?php if ($errors): ?>
@@ -169,6 +196,7 @@ page_header('Admin Panel');
     <div class="stat"><strong><?= $summary['active_products'] ?></strong><span>Active products</span></div>
     <div class="stat"><strong><?= $summary['low_stock'] ?></strong><span>Low-stock products</span></div>
     <div class="stat"><strong><?= $summary['pending_orders'] ?></strong><span>Pending/in-progress orders</span></div>
+    <div class="stat"><strong><?= $summary['new_custom_requests'] ?></strong><span>Open custom requests</span></div>
 </div>
 
 <section class="admin-section" aria-labelledby="add-product">
@@ -231,6 +259,55 @@ page_header('Admin Panel');
             </form>
         <?php endforeach; ?>
     </div>
+</section>
+
+<section class="admin-section" aria-labelledby="manage-custom-requests">
+    <h2 id="manage-custom-requests">Custom request inbox</h2>
+    <p class="small-text">Review the customer brief, then update the status as you discuss the quote and timeline.</p>
+
+    <?php if (!$customRequests): ?>
+        <p>No custom requests have been submitted.</p>
+    <?php else: ?>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Request</th>
+                        <th>Customer</th>
+                        <th>Brief</th>
+                        <th>Contact / delivery</th>
+                        <th>Submitted</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($customRequests as $request): ?>
+                        <tr>
+                            <td><strong>#<?= (int)$request['request_id'] ?> <?= e($request['title']) ?></strong><br><span class="small-text"><?= e($request['request_type']) ?>, <?= (int)$request['quantity'] ?> item(s)</span></td>
+                            <td><?= e($request['full_name']) ?><br><span class="small-text"><?= e($request['email']) ?></span></td>
+                            <td><?= nl2br(e($request['description'])) ?><br><span class="small-text">Colours: <?= e($request['color_preferences']) ?><br>Size: <?= e($request['size_details']) ?><?php if ($request['budget'] !== null): ?><br>Budget: <?= money($request['budget']) ?><?php endif; ?><?php if ($request['needed_by']): ?><br>Needed by: <?= e($request['needed_by']) ?><?php endif; ?></span><?php if ($request['inspiration_path']): ?><br><a href="<?= e(url($request['inspiration_path'])) ?>" target="_blank" rel="noopener">View inspiration image</a><?php endif; ?></td>
+                            <td><?= e($request['phone']) ?><br><?= nl2br(e($request['delivery_address'])) ?></td>
+                            <td><?= e(date('d M Y, g:i a', strtotime($request['created_at']))) ?></td>
+                            <td>
+                                <form method="post" class="status-form">
+                                    <?= csrf_input() ?>
+                                    <input type="hidden" name="action" value="update_custom_request">
+                                    <input type="hidden" name="request_id" value="<?= (int)$request['request_id'] ?>">
+                                    <label class="sr-only" for="custom-status-<?= (int)$request['request_id'] ?>">Status for custom request <?= (int)$request['request_id'] ?></label>
+                                    <select id="custom-status-<?= (int)$request['request_id'] ?>" name="status">
+                                        <?php foreach (['new', 'reviewing', 'quoted', 'accepted', 'declined'] as $status): ?>
+                                            <option value="<?= e($status) ?>" <?= $request['status'] === $status ? 'selected' : '' ?>><?= e(ucwords($status)) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <button class="button button-small" type="submit">Update</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
 </section>
 
 <section class="admin-section" aria-labelledby="manage-orders">

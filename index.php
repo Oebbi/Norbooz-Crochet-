@@ -30,36 +30,35 @@ page_header('Home');
 <section class="hero marketplace-hero">
     <div class="hero-copy">
         <p class="eyebrow">Handmade by Norbooz Crochet</p>
-        <h1>Small handmade pieces made to feel personal.</h1>
-        <p class="hero-text">Browse crochet plushies, throws, bags, hats, keychains, flowers, wall hangings and coasters. Check stock, place an order and follow its progress in one simple system.</p>
+        <h1>Thoughtful crochet pieces for everyday living.</h1>
+        <p class="hero-text">Discover plushies, throws, bags, hats, keychains, flowers, wall hangings and coasters designed to feel personal, practical and handmade.</p>
         <div class="actions">
-            <a class="button" href="<?= e(url('products.php')) ?>">Shop all products</a>
-            <?php if (!current_user()): ?>
-                <a class="button button-secondary" href="<?= e(url('register.php')) ?>">Create account</a>
-            <?php elseif (current_user()['role'] === 'customer'): ?>
-                <a class="button button-secondary" href="<?= e(url('my_orders.php')) ?>">Track my orders</a>
-            <?php endif; ?>
+            <a class="button" href="#collections">Browse collection</a>
+            <a class="button button-secondary" href="<?= e(url('products.php')) ?>">Start a custom order</a>
         </div>
         <div class="trust-row" aria-label="Store features">
             <span>Handmade</span>
+            <span>Free custom notes</span>
             <span>Clear stock</span>
-            <span>Custom notes</span>
-            <span>Order tracking</span>
+            <span>Fast order updates</span>
         </div>
     </div>
     <div class="hero-photo-wrap">
-        <img class="hero-photo" src="<?= e(url('assets/images/hero-photo.jpg')) ?>" alt="Crochet yarn and handmade items">
-        <div class="hero-photo-note"><strong>Your crochet, your way.</strong><span>Add colour or customisation notes when ordering.</span></div>
+        <img class="hero-photo" src="<?= e(url('assets/images/hero-photo.jpg.png')) ?>" alt="Handmade crochet plushies and products">
+        <div class="hero-photo-note">
+            <strong>New arrivals</strong>
+            <span>Handmade favourites for gifting, home styling and cosy daily essentials.</span>
+        </div>
     </div>
 </section>
 
-<section class="section" aria-labelledby="category-heading">
+<section class="section" id="collections" aria-labelledby="category-heading">
     <div class="section-heading-row">
         <div>
             <p class="eyebrow">Browse the collection</p>
             <h2 id="category-heading">Shop by product family</h2>
         </div>
-        <a class="text-link" href="<?= e(url('products.php')) ?>">View all products</a>
+        <a class="text-link" href="<?= e(url('products.php')) ?>">Request a custom piece</a>
     </div>
     <div class="category-grid">
         <?php foreach (product_categories() as $category): ?>
@@ -78,7 +77,7 @@ page_header('Home');
             <p class="eyebrow">Fresh from the catalogue</p>
             <h2 id="featured-heading">Featured products</h2>
         </div>
-        <a class="text-link" href="<?= e(url('products.php')) ?>">See the full shop</a>
+        <a class="text-link" href="<?= e(url('products.php')) ?>">Make something personal</a>
     </div>
     <div class="product-grid product-grid-home">
         <?php foreach ($featuredProducts as $product): ?>
@@ -101,14 +100,14 @@ page_header('Home');
 <section class="section benefits-section" aria-labelledby="why-heading">
     <div class="section-heading-row">
         <div>
-            <p class="eyebrow">Simple and organised</p>
-            <h2 id="why-heading">Designed for a small handmade business</h2>
+            <p class="eyebrow">Why customers shop here</p>
+            <h2 id="why-heading">Made to feel thoughtful and personal</h2>
         </div>
     </div>
     <div class="feature-grid">
-        <article class="card"><span class="feature-number">01</span><h3>Clear product information</h3><p>Customers can see product names, categories, prices and current stock before ordering.</p></article>
-        <article class="card"><span class="feature-number">02</span><h3>Easy order tracking</h3><p>Logged-in customers can follow whether an order is pending, in progress, ready or completed.</p></article>
-        <article class="card"><span class="feature-number">03</span><h3>Protected administration</h3><p>The owner manages products, stock and order status from a role-protected administrator area.</p></article>
+        <article class="card"><span class="feature-number">01</span><h3>Unique handmade pieces</h3><p>Every item is designed to feel warm, personal and different from mass-produced alternatives.</p></article>
+        <article class="card"><span class="feature-number">02</span><h3>Easy order customisation</h3><p>Customers can add notes and track their order progress without friction.</p></article>
+        <article class="card"><span class="feature-number">03</span><h3>Small-batch quality</h3><p>Thoughtful materials and simple browsing make each order feel more personal and intentional.</p></article>
     </div>
 </section>
 <?php page_footer(); ?>

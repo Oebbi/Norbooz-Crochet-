@@ -62,6 +62,8 @@ page_header('Login');
         <button class="button" type="submit">Log in</button>
     </form>
 
+    <?php if ($error): ?><p class="login-recovery"><a href="<?= e(url('forgot_password.php')) ?>">Forgot your password?</a></p><?php endif; ?>
+
     <p class="small-text">Demo administrator: <strong>admin@norboozcrochet.local</strong> / <strong>Admin@12345</strong>. Change this credential before any real deployment.</p>
 </section>
 <?php page_footer(); ?>
