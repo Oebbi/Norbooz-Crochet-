@@ -1,0 +1,6 @@
+config/local.php
+*.log
+*.sql.bak
+/backups/
+.DS_Store
+Thumbs.db
