@@ -39,8 +39,16 @@ $defaults = [
     'POSTAGE_FEE' => 12.00,
     'FREE_POSTAGE_OVER' => 100.00,
 
-    // Shown to the customer after they place an order. No card data is ever collected by the site.
+    // Instructions for the manual-payment option.
     'PAYMENT_INSTRUCTIONS' => 'We will email you within one business day to confirm your order and send PayID / bank transfer details. Your item is reserved for 3 days while we wait for payment.',
+
+    // Hosted checkout provider credentials. Keep live values in config/local.php only.
+    'STRIPE_SECRET_KEY' => '',
+    'STRIPE_WEBHOOK_SECRET' => '',
+    'PAYPAL_CLIENT_ID' => '',
+    'PAYPAL_CLIENT_SECRET' => '',
+    'PAYPAL_WEBHOOK_ID' => '',
+    'PAYPAL_MODE' => 'sandbox',
 
     // Security
     'SESSION_IDLE_MINUTES' => 30,

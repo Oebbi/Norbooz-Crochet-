@@ -1,5 +1,12 @@
 # Changelog
 
+## Version 3.3 (September 2026)
+
+### Online payments
+- Added hosted Stripe checkout for cards, Apple Pay and eligible Afterpay payments, plus PayPal Checkout
+- Added signed payment webhooks, payment state tracking, provider returns and safe inventory release on failed or expired checkouts
+- Added a version 4 database upgrade that preserves existing orders and marks them as manual-payment orders
+
 ## Version 3.2 (September 2026)
 
 ### Accessibility (WCAG 2.2 AA) and all screen sizes

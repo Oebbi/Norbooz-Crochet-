@@ -22,3 +22,13 @@ define('MAIL_MODE', 'mail');
 // define('POSTAGE_FEE', 12.00);
 // define('FREE_POSTAGE_OVER', 100.00);
 // define('PAYMENT_INSTRUCTIONS', 'Pay by PayID to 04xx xxx xxx (Norbooz Crochet) using your order number as the reference.');
+
+// Online payments (keep real values in config/local.php; never commit them).
+// Stripe Checkout enables cards, Apple Pay (after domain verification), and Afterpay (if approved).
+// define('STRIPE_SECRET_KEY', 'sk_test_...');
+// define('STRIPE_WEBHOOK_SECRET', 'whsec_...');
+// PayPal Checkout requires a REST app and webhook configured in the PayPal developer dashboard.
+// define('PAYPAL_CLIENT_ID', '...');
+// define('PAYPAL_CLIENT_SECRET', '...');
+// define('PAYPAL_WEBHOOK_ID', '...');
+// define('PAYPAL_MODE', 'sandbox'); // use 'live' only after testing

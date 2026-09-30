@@ -14,6 +14,11 @@ $add = function (string $label, bool $ok, string $help = '', bool $warningOnly =
 
 $add('PHP version 8.1 or newer (found ' . PHP_VERSION . ')', version_compare(PHP_VERSION, '8.1', '>='), 'Use XAMPP 8.1 or newer.');
 $add('PDO MySQL extension', extension_loaded('pdo_mysql'), 'Enable extension=pdo_mysql in php.ini.');
+$onlinePaymentsConfigured = STRIPE_SECRET_KEY !== '' || (PAYPAL_CLIENT_ID !== '' && PAYPAL_CLIENT_SECRET !== '');
+$add('cURL extension for online payments', !$onlinePaymentsConfigured || extension_loaded('curl'), 'Enable extension=curl in php.ini and restart Apache.', !$onlinePaymentsConfigured);
+$paymentCredentialsReady = (STRIPE_SECRET_KEY !== '' && STRIPE_WEBHOOK_SECRET !== '')
+    || (PAYPAL_CLIENT_ID !== '' && PAYPAL_CLIENT_SECRET !== '' && PAYPAL_WEBHOOK_ID !== '');
+$add('HTTPS public URL for hosted payments', !$paymentCredentialsReady || str_starts_with(APP_URL, 'https://'), 'Set APP_URL to the public HTTPS address configured with the payment providers.', !$paymentCredentialsReady);
 $add('mbstring extension', extension_loaded('mbstring'), 'Enable extension=mbstring in php.ini.');
 $add('fileinfo extension (checks uploaded files)', extension_loaded('fileinfo'), 'Enable extension=fileinfo in php.ini.', true);
 $add('GD extension (resizes uploaded photos)', extension_loaded('gd'), 'Enable extension=gd in php.ini, then restart Apache. Without it, uploads are stored at full size.', true);
@@ -36,9 +41,10 @@ try {
     try {
         $pdo->query('SELECT delivery_method, subtotal_amount FROM orders LIMIT 1');
         $pdo->query('SELECT password_changed_at, is_deleted FROM users LIMIT 1');
-        $add('Database is version 3', true);
+        $pdo->query('SELECT payment_status, payment_provider, payment_reference, paid_at FROM orders LIMIT 1');
+        $add('Database is version 4', true);
     } catch (Throwable $ex) {
-        $add('Database is version 3', false, 'Open upgrade.php to add the new columns.');
+        $add('Database is version 4', false, 'Back up the database, then open upgrade.php to add the new columns.');
     }
     $admins = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
     $add('Administrator account exists', $admins > 0, 'Re-import the database file.');

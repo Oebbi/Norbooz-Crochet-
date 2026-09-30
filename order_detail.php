@@ -14,13 +14,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'cance
     $pdo = db();
     try {
         $pdo->beginTransaction();
-        $owner = $pdo->prepare('SELECT status FROM orders WHERE order_id = ? AND user_id = ? FOR UPDATE');
+        $owner = $pdo->prepare('SELECT status, payment_status, payment_provider FROM orders WHERE order_id = ? AND user_id = ? FOR UPDATE');
         $owner->execute([$orderId, $user['user_id']]);
-        $status = $owner->fetchColumn();
-        if ($status === false) {
+        $ownedOrder = $owner->fetch();
+        if (!$ownedOrder) {
             throw new RuntimeException('Order not found.');
         }
-        if ($status !== 'pending') {
+        if ($ownedOrder['payment_provider'] !== 'manual') {
+            throw new RuntimeException('Online payments cannot be cancelled here. Contact us if you need help with a refund.');
+        }
+        if ($ownedOrder['status'] !== 'pending') {
             throw new RuntimeException('This order is already being made, so it cannot be cancelled online. Please contact us.');
         }
         change_order_status($pdo, $orderId, 'cancelled', $user['user_id'], 'Cancelled by customer');
@@ -71,7 +74,7 @@ page_header('Order #' . $orderId);
 <?php if (isset($_GET['placed']) && $order['status'] === 'pending'): ?>
     <div class="callout">
         <h2>What happens next</h2>
-        <p><?= e(PAYMENT_INSTRUCTIONS) ?></p>
+        <p><?= $order['payment_provider'] === 'manual' ? e(PAYMENT_INSTRUCTIONS) : 'Complete payment through the secure checkout to confirm your order.' ?></p>
         <p class="small-text">A confirmation has been sent to your email address.</p>
     </div>
 <?php endif; ?>
@@ -108,13 +111,15 @@ page_header('Order #' . $orderId);
     <aside class="summary-card">
         <h2>Delivery details</h2>
         <p><?= e($order['phone']) ?><br><?= nl2br(e($order['address'])) ?></p>
+        <h2>Payment</h2>
+        <p><strong><?= e(format_status($order['payment_status'])) ?></strong><br><?= e(match ($order['payment_provider']) { 'stripe' => 'Card, Apple Pay or Afterpay', 'paypal' => 'PayPal', default => 'PayID or bank transfer' }) ?><?= $order['paid_at'] ? '<br>Paid ' . e(format_date($order['paid_at'])) : '' ?></p>
         <h2>History</h2>
         <ol class="timeline">
             <?php foreach ($history as $event): ?>
                 <li><strong><?= e(format_status($event['new_status'])) ?></strong><span class="small-text"><?= e(format_date($event['changed_at'])) ?><?= $event['note'] ? ' &middot; ' . e($event['note']) : '' ?></span></li>
             <?php endforeach; ?>
         </ol>
-        <?php if ($order['status'] === 'pending'): ?>
+        <?php if ($order['status'] === 'pending' && $order['payment_provider'] === 'manual'): ?>
             <form method="post" data-confirm="Cancel order #<?= (int)$orderId ?>? This cannot be undone online.">
                 <?= csrf_input() ?>
                 <input type="hidden" name="action" value="cancel">

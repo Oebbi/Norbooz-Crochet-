@@ -60,6 +60,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? 'status') === 
         if (!is_valid_order_status($newStatus)) {
             throw new RuntimeException('Choose a valid status.');
         }
+        $payment = $pdo->prepare('SELECT payment_status, payment_provider FROM orders WHERE order_id = ?');
+        $payment->execute([$orderId]);
+        $payment = $payment->fetch();
+        if (!$payment) {
+            throw new RuntimeException('Order not found.');
+        }
+        if ($payment['payment_provider'] !== 'manual' && $payment['payment_status'] !== 'paid') {
+            throw new RuntimeException('This order has not been paid. Complete or cancel its online checkout before changing fulfillment status.');
+        }
+        if ($payment['payment_provider'] !== 'manual' && $newStatus === 'cancelled') {
+            throw new RuntimeException('Cancel or refund online payments through the payment provider before changing this order.');
+        }
         $pdo->beginTransaction();
         $order = change_order_status($pdo, $orderId, $newStatus, current_user()['user_id'], $note);
         $pdo->commit();
@@ -107,6 +119,11 @@ $history->execute([$orderId]);
 $history = $history->fetchAll();
 
 $next = allowed_status_transitions($order['status']);
+if ($order['payment_provider'] !== 'manual') {
+    $next = $order['payment_status'] === 'paid'
+        ? array_values(array_filter($next, static fn(string $status): bool => $status !== 'cancelled'))
+        : [];
+}
 
 page_header('Order #' . $orderId);
 admin_nav();
@@ -136,7 +153,7 @@ admin_nav();
             <dl class="summary-lines">
                 <div><dt>Subtotal</dt><dd><?= money($order['subtotal_amount']) ?></dd></div>
                 <div><dt>Delivery (<?= $order['delivery_method'] === 'pickup' ? 'pickup' : 'post' ?>)</dt><dd><?= money($order['delivery_fee']) ?></dd></div>
-                <div class="summary-total"><dt>Total to collect</dt><dd><?= money($order['total_amount']) ?></dd></div>
+                <div class="summary-total"><dt>Order total</dt><dd><?= money($order['total_amount']) ?></dd></div>
             </dl>
             <?php if ($order['custom_note']): ?><p class="callout"><strong>Customer note:</strong> <?= e($order['custom_note']) ?></p><?php endif; ?>
         </section>
@@ -157,6 +174,11 @@ admin_nav();
             <h2>Customer</h2>
             <p><strong><?= e($order['full_name']) ?></strong><br><a href="mailto:<?= e($order['email']) ?>?subject=Norbooz%20Crochet%20order%20%23<?= (int)$orderId ?>"><?= e($order['email']) ?></a><br><?= e($order['phone']) ?></p>
             <p><?= $order['delivery_method'] === 'pickup' ? '<strong>Pickup</strong>' : '<strong>Post to:</strong>' ?><br><?= nl2br(e($order['address'])) ?></p>
+        </section>
+
+        <section class="summary-card">
+            <h2>Payment</h2>
+            <p><strong><?= e(format_status($order['payment_status'])) ?></strong><br><?= e(match ($order['payment_provider']) { 'stripe' => 'Card, Apple Pay or Afterpay', 'paypal' => 'PayPal', default => 'PayID or bank transfer' }) ?><?= $order['paid_at'] ? '<br>Paid ' . e(format_date($order['paid_at'])) : '' ?></p>
         </section>
 
         <?php if (in_array($order['status'], ['pending', 'in_progress', 'ready'], true)): ?>
@@ -180,7 +202,7 @@ admin_nav();
         <section class="summary-card">
             <h2>Update status</h2>
             <?php if (!$next): ?>
-                <p>This order is <?= e(strtolower(format_status($order['status']))) ?>. No further changes are allowed.</p>
+                <p><?= $order['payment_provider'] !== 'manual' && $order['payment_status'] !== 'paid' ? 'Online payment must be confirmed before fulfillment can begin.' : 'This order is ' . strtolower(format_status($order['status'])) . '. No further changes are allowed.' ?></p>
             <?php else: ?>
                 <form method="post">
                     <?= csrf_input() ?>

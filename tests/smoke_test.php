@@ -4,6 +4,28 @@
  * Run from the project folder:  php tests/smoke_test.php
  */
 require_once __DIR__ . '/../config/functions.php';
+require_once __DIR__ . '/../config/payments.php';
+
+$previousRemoteAddress = $_SERVER['REMOTE_ADDR'] ?? null;
+$previousHost = $_SERVER['HTTP_HOST'] ?? null;
+$_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+$_SERVER['HTTP_HOST'] = 'localhost';
+$localPaymentOptions = online_payment_options();
+$_SERVER['REMOTE_ADDR'] = '192.0.2.1';
+$_SERVER['HTTP_HOST'] = 'shop.example.com';
+$publicPaymentOptions = online_payment_options();
+$_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+$proxiedPublicPaymentOptions = online_payment_options();
+if ($previousRemoteAddress === null) {
+    unset($_SERVER['REMOTE_ADDR']);
+} else {
+    $_SERVER['REMOTE_ADDR'] = $previousRemoteAddress;
+}
+if ($previousHost === null) {
+    unset($_SERVER['HTTP_HOST']);
+} else {
+    $_SERVER['HTTP_HOST'] = $previousHost;
+}
 
 $tests = [];
 $tests['HTML output is encoded'] = e('<script>alert(1)</script>') === '&lt;script&gt;alert(1)&lt;/script&gt;';
@@ -37,6 +59,9 @@ $tests['Eight product families'] = count(product_categories()) === 8;
 $tests['Old Beanies category maps to Hats'] = canonical_product_category('Beanies') === 'Hats';
 $tests['Local redirect allowed'] = safe_next('order_detail.php?id=5') === 'order_detail.php?id=5';
 $tests['External redirect blocked'] = safe_next('https://evil.example') === 'index.php' && safe_next('//evil.example') === 'index.php';
+$tests['Local checkout offers no-charge payment samples'] = isset($localPaymentOptions['demo_apple_pay'], $localPaymentOptions['demo_afterpay'], $localPaymentOptions['demo_paypal']);
+$tests['Public checkout never offers demo payment samples'] = !isset($publicPaymentOptions['demo_apple_pay'], $publicPaymentOptions['demo_afterpay'], $publicPaymentOptions['demo_paypal']);
+$tests['Public hostname never exposes local demo through a proxy'] = !isset($proxiedPublicPaymentOptions['demo_apple_pay'], $proxiedPublicPaymentOptions['demo_afterpay'], $proxiedPublicPaymentOptions['demo_paypal']);
 
 $failed = 0;
 foreach ($tests as $name => $ok) {

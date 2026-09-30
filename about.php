@@ -1,5 +1,7 @@
 <?php
 require_once __DIR__ . '/config/functions.php';
+require_once __DIR__ . '/config/payments.php';
+$paymentOptions = online_payment_options();
 page_header('About & FAQ', 'About Norbooz Crochet: handmade crochet pieces from ' . SHOP_LOCATION . ', delivery, payment and care FAQ.');
 ?>
 <section class="page-heading">
@@ -20,7 +22,7 @@ page_header('About & FAQ', 'About Norbooz Crochet: handmade crochet pieces from 
     <div class="faq">
         <details open>
             <summary>How do I pay?</summary>
-            <p>No payment is taken on the website. After you place an order we email you within one business day to confirm it and send PayID or bank transfer details. Your items are reserved for 3 days while we wait for payment.</p>
+            <p><?= count($paymentOptions) > 1 ? 'Choose a configured secure online payment method at checkout, or select PayID or bank transfer. Card details are entered with the payment provider and are never stored on this website.' : 'No payment is taken on the website. After you place an order we email you within one business day to confirm it and send PayID or bank transfer details. Your items are reserved for 3 days while we wait for payment.' ?></p>
         </details>
         <details>
             <summary>How much is delivery?</summary>
@@ -32,7 +34,7 @@ page_header('About & FAQ', 'About Norbooz Crochet: handmade crochet pieces from 
         </details>
         <details>
             <summary>Can I cancel an order?</summary>
-            <p>Yes. While an order is still <em>Pending</em> you can cancel it yourself from <a href="<?= e(url('my_orders.php')) ?>">My orders</a>. Once we start making it, please email us.</p>
+            <p>Manual-payment orders can be cancelled while they are still <em>Pending</em> from <a href="<?= e(url('my_orders.php')) ?>">My orders</a>. For an order paid online, please email us so we can safely handle any refund. Once we start making an order, please contact us.</p>
         </details>
         <details>
             <summary>How do I care for crochet items?</summary>

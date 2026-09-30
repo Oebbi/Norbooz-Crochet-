@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config/functions.php';
+require_once __DIR__ . '/config/payments.php';
 require_customer();
 
 $user = current_user();
@@ -12,13 +13,15 @@ if (!$lines) {
     redirect('cart.php');
 }
 
-$profile = db()->prepare('SELECT phone, address FROM users WHERE user_id = ?');
+$profile = db()->prepare('SELECT phone, address, email FROM users WHERE user_id = ?');
 $profile->execute([$user['user_id']]);
-$profile = $profile->fetch() ?: ['phone' => '', 'address' => ''];
+$profile = $profile->fetch() ?: ['phone' => '', 'address' => '', 'email' => ''];
+$paymentOptions = online_payment_options();
 
 $errors = [];
 $form = [
     'delivery_method' => PICKUP_ENABLED ? (string)($_POST['delivery_method'] ?? 'post') : 'post',
+    'payment_method' => (string)($_POST['payment_method'] ?? 'manual'),
     'phone' => trim((string)($_POST['phone'] ?? $profile['phone'])),
     'address' => trim((string)($_POST['address'] ?? $profile['address'])),
     'custom_note' => trim((string)($_POST['custom_note'] ?? '')),
@@ -40,6 +43,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!in_array($form['delivery_method'], PICKUP_ENABLED ? ['pickup', 'post'] : ['post'], true)) {
         $errors[] = 'Choose a delivery method.';
     }
+    if (!array_key_exists($form['payment_method'], $paymentOptions)) {
+        $errors[] = 'Choose an available payment method.';
+    }
+        $isDemoPayment = is_demo_payment_method($form['payment_method']);
     if (!valid_phone($form['phone'])) {
         $errors[] = 'Enter a contact phone number (8-20 digits).';
     }
@@ -51,6 +58,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if (!isset($_POST['accept_terms'])) {
         $errors[] = 'Please confirm you have read how payment and delivery work.';
+    }
+
+    if (!$errors && $isDemoPayment) {
+        $feeCents = delivery_fee_cents($form['delivery_method'], $subtotal);
+        $_SESSION['payment_demo'] = [
+            'method' => $form['payment_method'],
+            'total_cents' => $subtotal + $feeCents,
+        ];
+        redirect('payment_demo.php');
     }
 
     if (!$errors) {
@@ -83,11 +99,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $address = $form['delivery_method'] === 'pickup' ? 'Pickup - ' . SHOP_LOCATION : $form['address'];
 
             $pdo->prepare(
-                "INSERT INTO orders (user_id, order_date, status, subtotal_amount, delivery_method, delivery_fee, total_amount, phone, address, custom_note)
-                 VALUES (?, NOW(), 'pending', ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO orders (user_id, order_date, status, subtotal_amount, delivery_method, delivery_fee, total_amount, payment_status, payment_provider, phone, address, custom_note)
+                 VALUES (?, NOW(), 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )->execute([
                 $user['user_id'], cents_to_decimal($subtotalCents), $form['delivery_method'], cents_to_decimal($feeCents),
-                cents_to_decimal($totalCents), $form['phone'], $address, $form['custom_note'] !== '' ? $form['custom_note'] : null,
+                cents_to_decimal($totalCents), $form['payment_method'] === 'manual' ? 'manual' : 'unpaid', $form['payment_method'],
+                $form['phone'], $address, $form['custom_note'] !== '' ? $form['custom_note'] : null,
             ]);
             $orderId = (int)$pdo->lastInsertId();
 
@@ -113,27 +130,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (!$errors) {
-            unset($_SESSION['checkout_token']);
-            cart_clear();
-
-            // Remember contact details for next time if the customer's profile was empty.
-            if ($profile['phone'] === '' || $profile['address'] === '') {
-                db()->prepare("UPDATE users SET phone = IF(phone = '', ?, phone), address = IF(address = '', ?, address) WHERE user_id = ?")
-                    ->execute([$form['phone'], $form['address'], $user['user_id']]);
+            if ($form['payment_method'] !== 'manual') {
+                try {
+                    $checkout = create_payment_session($form['payment_method'], $orderId, $totalCents, (string)$profile['email']);
+                    store_payment_reference($orderId, $form['payment_method'], $checkout['reference']);
+                    unset($_SESSION['checkout_token']);
+                    cart_clear();
+                    header('Location: ' . $checkout['url']);
+                    exit;
+                } catch (Throwable $ex) {
+                    cancel_unpaid_order($orderId, (int)$user['user_id'], 'Payment session could not be started');
+                    error_log('Payment session failed for order #' . $orderId . ': ' . $ex->getMessage());
+                    $errors[] = 'Online checkout could not be started. Your order was not charged. Please try again or choose another payment method.';
+                }
+            } else {
+                unset($_SESSION['checkout_token']);
+                cart_clear();
             }
 
-            $email = db()->prepare('SELECT email FROM users WHERE user_id = ?');
-            $email->execute([$user['user_id']]);
-            $email = (string)$email->fetchColumn();
-            $itemText = implode("\n", array_map(fn($i) => '- ' . $i['name'] . ' x ' . $i['quantity'] . ' @ ' . money($i['unit_cents'] / 100), $items));
-            $summary = "Order #$orderId\n$itemText\n\nSubtotal: " . money($subtotalCents / 100)
-                . "\nDelivery (" . ($form['delivery_method'] === 'pickup' ? 'pickup' : 'post') . '): ' . money($feeCents / 100)
-                . "\nTotal: " . money($totalCents / 100);
-            send_email($email, "Order #$orderId received", "Hi {$user['full_name']},\n\nThank you for your order!\n\n$summary\n\nWhat happens next:\n" . PAYMENT_INSTRUCTIONS . "\n\nTrack your order: " . absolute_url('order_detail.php?id=' . $orderId));
-            send_email(SHOP_EMAIL, "New order #$orderId from {$user['full_name']}", "$summary\n\nPhone: {$form['phone']}\nAddress: $address\nNote: " . ($form['custom_note'] ?: '-') . "\n\nManage: " . absolute_url('admin_order.php?id=' . $orderId));
+            if (!$errors) {
+                // Remember contact details for next time if the customer's profile was empty.
+                if ($profile['phone'] === '' || $profile['address'] === '') {
+                    db()->prepare("UPDATE users SET phone = IF(phone = '', ?, phone), address = IF(address = '', ?, address) WHERE user_id = ?")
+                        ->execute([$form['phone'], $form['address'], $user['user_id']]);
+                }
 
-            flash('success', 'Thank you! Order #' . $orderId . ' has been placed.');
-            redirect('order_detail.php?id=' . $orderId . '&placed=1');
+                $email = (string)$profile['email'];
+                $itemText = implode("\n", array_map(fn($i) => '- ' . $i['name'] . ' x ' . $i['quantity'] . ' @ ' . money($i['unit_cents'] / 100), $items));
+                $summary = "Order #$orderId\n$itemText\n\nSubtotal: " . money($subtotalCents / 100)
+                    . "\nDelivery (" . ($form['delivery_method'] === 'pickup' ? 'pickup' : 'post') . '): ' . money($feeCents / 100)
+                    . "\nTotal: " . money($totalCents / 100);
+                send_email($email, "Order #$orderId received", "Hi {$user['full_name']},\n\nThank you for your order!\n\n$summary\n\nWhat happens next:\n" . PAYMENT_INSTRUCTIONS . "\n\nTrack your order: " . absolute_url('order_detail.php?id=' . $orderId));
+                send_email(SHOP_EMAIL, "New order #$orderId from {$user['full_name']}", "$summary\n\nPhone: {$form['phone']}\nAddress: $address\nNote: " . ($form['custom_note'] ?: '-') . "\n\nManage: " . absolute_url('admin_order.php?id=' . $orderId));
+
+                flash('success', 'Thank you! Order #' . $orderId . ' has been placed.');
+                redirect('order_detail.php?id=' . $orderId . '&placed=1');
+            }
         }
         $_SESSION['checkout_token'] = bin2hex(random_bytes(16));
         [$lines, $subtotal] = cart_lines();
@@ -164,6 +196,15 @@ page_header('Checkout');
                 <span><strong>Australia Post</strong><span class="small-text"><?= $postFee === 0 ? 'Free for this order' : money($postFee / 100) . (FREE_POSTAGE_OVER > 0 ? ', free over ' . money(FREE_POSTAGE_OVER) : '') ?></span></span></label>
         </fieldset>
 
+        <fieldset>
+            <legend>Payment method</legend>
+            <?php foreach ($paymentOptions as $method => $label): ?>
+                <label class="radio-card payment-radio-card"><input type="radio" name="payment_method" value="<?= e($method) ?>" <?= $form['payment_method'] === $method ? 'checked' : '' ?> required>
+                    <span class="payment-option-icon"><?= payment_icon($method) ?></span>
+                    <span class="payment-option-copy"><strong><?= e($label) ?></strong><span class="small-text"><?= $method === 'manual' ? 'We will email payment instructions after your order.' : (str_starts_with($method, 'demo_') ? 'Local sample only. No payment will be taken.' : 'You will pay securely on ' . ($method === 'stripe' ? 'Stripe' : 'PayPal') . '.') ?></span></span></label>
+            <?php endforeach; ?>
+        </fieldset>
+
         <label for="phone">Contact phone</label>
         <input id="phone" name="phone" type="tel" maxlength="20" value="<?= e($form['phone']) ?>" autocomplete="tel" required>
 
@@ -173,7 +214,7 @@ page_header('Checkout');
         <label for="custom_note">Notes for the maker <span class="hint">(optional)</span></label>
         <textarea id="custom_note" name="custom_note" rows="3" maxlength="500" placeholder="Gift message, colour preference or anything else we agreed"><?= e($form['custom_note']) ?></textarea>
 
-        <label class="checkbox"><input type="checkbox" name="accept_terms" value="1" required> I understand no payment is taken online: Norbooz Crochet will email me to confirm the order and send payment details.</label>
+        <label class="checkbox"><input type="checkbox" name="accept_terms" value="1" required> I have read and agree to the payment and delivery details for my selected method.</label>
     </div>
 
     <aside class="summary-card" aria-labelledby="summary-heading">

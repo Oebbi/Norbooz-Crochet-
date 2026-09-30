@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config/functions.php';
+require_once __DIR__ . '/config/payments.php';
 
 if (is_admin()) {
     redirect('admin.php');
@@ -54,6 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 [$lines, $subtotal, $notices] = cart_lines();
+$paymentOptions = online_payment_options();
 foreach ($notices as $notice) {
     flash('info', $notice);
 }
@@ -111,7 +113,7 @@ page_header('Your cart');
         </dl>
         <p class="small-text"><?= PICKUP_ENABLED ? 'Free pickup in Canberra. ' : '' ?>Post <?= money(POSTAGE_FEE) ?><?= FREE_POSTAGE_OVER > 0 ? ', free over ' . money(FREE_POSTAGE_OVER) : '' ?>.</p>
         <a class="button button-block" href="<?= e(url('checkout.php')) ?>"><?= current_user() ? 'Continue to checkout' : 'Log in to check out' ?></a>
-        <p class="small-text">No payment is taken on this website. We confirm your order by email and send PayID / bank transfer details.</p>
+        <p class="small-text"><?= isset($paymentOptions['stripe']) || isset($paymentOptions['paypal']) ? 'Secure online payment is available at checkout, along with PayID or bank transfer.' : (isset($paymentOptions['demo_apple_pay']) ? 'Local sample payment options are available at checkout. They take no payment.' : 'We confirm your order by email and send PayID or bank transfer details.') ?></p>
     </aside>
 </div>
 <?php endif; ?>

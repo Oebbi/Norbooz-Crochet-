@@ -16,10 +16,10 @@ page_header('Privacy policy', 'How Norbooz Crochet collects, uses, stores and pr
         <li><strong>Order and custom-request details</strong>, including any inspiration photo you choose to upload, so we can make your item.</li>
         <li><strong>Sign-in attempts</strong> (email address, IP address and time) for up to 24 hours, to protect accounts from password-guessing attacks.</li>
     </ul>
-    <p>We only collect what we need (APP 3). We do <strong>not</strong> collect or store credit card or bank card details on this website.</p>
+    <p>We only collect what we need (APP 3). We do <strong>not</strong> collect or store credit card or bank card details on this website. If you choose online payment, Stripe or PayPal processes the payment under its own privacy policy.</p>
 
     <h2>How we use it</h2>
-    <p>Your information is used only to process orders, reply to custom requests and send messages about your order. We send product news only if you opt in, and you can opt out at any time from your account page (APP 7). We never sell or share your information, except with Australia Post to deliver your parcel (APP 6).</p>
+    <p>Your information is used only to process orders, reply to custom requests and send messages about your order. We send product news only if you opt in, and you can opt out at any time from your account page (APP 7). We never sell your information. We share delivery details with Australia Post and payment details with the provider you select at checkout (APP 6).</p>
 
     <h2>How we protect it</h2>
     <ul>

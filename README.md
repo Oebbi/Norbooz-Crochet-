@@ -19,7 +19,7 @@ Built with HTML5, CSS3, JavaScript, PHP 8.1+ and MySQL/MariaDB (ICT312 Advanced 
 Administrator: `admin@norboozcrochet.local`, temporary password `Admin@12345`.
 The admin panel shows a warning until this password is changed on the Account page.
 
-**Already have the version 2 database with real data?** Copy the new files, back up the database,
+**Already have a version 2 or 3 database with real data?** Copy the new files, back up the database,
 then open http://localhost/norbooz_crochet/upgrade.php instead of re-importing.
 
 The full steps, including going live on a web host, are in the *Installation Manual*.
@@ -30,7 +30,7 @@ The full steps, including going live on a web host, are in the *Installation Man
 |---|---|
 | Shop with search, family filter, sort, in-stock filter and pages | Dashboard: new orders, requests to answer, low stock, monthly sales, best sellers |
 | Product pages with photos and related items | Orders: filter, search, CSV export, status workflow with audit history and customer emails |
-| Cart and two-step checkout, pickup or post | Products: add/edit/hide/delete, photo upload with automatic resizing, quick stock edit |
+| Cart and checkout with pickup or post; hosted Stripe/PayPal payment when configured | Products: add/edit/hide/delete, photo upload with automatic resizing, quick stock edit |
 | Order tracking with progress steps; cancel while pending | Custom requests: view brief and photo, send quote and reply |
 | Custom-request form with private photo upload; edit or withdraw while new; see quotes | Customers list with order history |
 | Account page: edit details, change password, download data, delete account | Installation check and database upgrade tools |
@@ -48,13 +48,14 @@ The full steps, including going live on a web host, are in the *Installation Man
 - Uploads: type checked by content, size limited, re-encoded (strips hidden data), random names; customer photos stored outside the web folder
 - Order safety: row locking, server-side prices and totals in cents, stock check inside a transaction, duplicate-submit token
 - Privacy (Australian Privacy Principles): privacy policy, data download (APP 12), correction (APP 13), account deletion by de-identification (APP 11.2), marketing opt-in only
-- No card data collected; payment is arranged by PayID or bank transfer
+- No card data stored; online payments are handled by Stripe or PayPal, with PayID/bank transfer as a manual option
 
 ## Project structure
 
 ```
 index.php, products.php, product.php      Home, shop, product page
 cart.php, checkout.php, order_detail.php  Ordering
+payment_*.php, config/payments.php        Hosted payment callbacks and webhooks
 my_orders.php, customize.php, account.php Customer area
 admin*.php                                Admin panel
 config/config.php                         Settings (override in config/local.php, not committed)
@@ -87,4 +88,13 @@ On Windows use `C:\xampp\php\php.exe` instead of `php`. The latest results are s
 ## Configuration for a live site
 
 Copy `config/local.example.php` to `config/local.php` and set the database account, `APP_URL`,
-`MAIL_MODE = 'mail'` and the payment instructions. See the Installation Manual, section 5.
+`MAIL_MODE = 'mail'` and the payment instructions. Before using online payments:
+
+1. Back up the database and run `upgrade.php` so payment state columns are added.
+2. Configure Stripe test keys and PayPal sandbox credentials in the untracked `config/local.php`.
+3. Register `payment_webhook.php?provider=stripe` for `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed` and `checkout.session.expired`; register `payment_webhook.php?provider=paypal` for `PAYMENT.CAPTURE.COMPLETED` and `CHECKOUT.ORDER.VOIDED`.
+4. Enable Afterpay in Stripe if approved. Apple Pay is presented automatically by hosted Checkout on supported devices. Test end-to-end in sandbox before switching credentials and PayPal mode to live.
+
+Stripe uses hosted Checkout for cards, Apple Pay and Afterpay. PayPal uses its hosted approval flow. Neither provider secret belongs in the repository or in a message.
+
+When the shop is opened from localhost, checkout instead shows sample Apple Pay, Afterpay and PayPal choices. These open `payment_demo.php` and do not contact a provider, create an order, charge money or change stock.

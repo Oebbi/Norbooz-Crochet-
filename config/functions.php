@@ -784,7 +784,7 @@ function format_status(string $status): string
 function status_description(string $status): string
 {
     return [
-        'pending' => 'Order received. We will confirm it and send payment details.',
+        'pending' => 'Order received. We will update you when fulfillment begins.',
         'in_progress' => 'Your piece is being made or prepared.',
         'ready' => 'Ready for pickup or posting.',
         'completed' => 'Delivered or collected. Thank you!',
@@ -946,10 +946,14 @@ function page_header(string $title, string $description = ''): void
 function page_footer(): void
 {
     echo '</main><footer class="site-footer"><div class="container footer-grid">';
-    echo '<div><div class="footer-brand">Norbooz Crochet</div><p>Handmade crochet pieces made in small batches in ' . e(SHOP_LOCATION) . '. Custom orders welcome.</p><p><a href="mailto:' . e(SHOP_EMAIL) . '">' . e(SHOP_EMAIL) . '</a></p></div>';
+    echo '<div><div class="footer-brand">Norbooz Crochet</div><p>Handmade crochet pieces made in small batches in ' . e(SHOP_LOCATION) . '. Custom orders welcome.</p><p><a href="mailto:' . e(SHOP_EMAIL) . '">' . e(SHOP_EMAIL) . '</a></p><nav class="footer-socials" aria-label="Social media">';
+    echo '<a href="https://www.instagram.com/norbooz.crochet?stkn=enZlYW85bngxZmJ5" target="_blank" rel="noopener noreferrer" aria-label="Instagram"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.25"/></svg></a>';
+    echo '<a href="https://youtube.com/@norbooz.crochet2026?si=jRdbv2EiNjQLVE0H" target="_blank" rel="noopener noreferrer" aria-label="YouTube"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M23 7.2a3 3 0 0 0-2.1-2.1C19.1 4.6 12 4.6 12 4.6s-7.1 0-8.9.5A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12a31 31 0 0 0 .5 4.8 3 3 0 0 0 2.1 2.1c1.8.5 8.9.5 8.9.5s7.1 0 8.9-.5a3 3 0 0 0 2.1-2.1 31 31 0 0 0 .5-4.8 31 31 0 0 0-.5-4.8ZM9.6 15.6V8.4l6.2 3.6-6.2 3.6Z"/></svg></a>';
+    echo '<a href="https://www.tiktok.com/@norbooz.crochet?_r=1&amp;_t=ZS-9A9sQQTiiNW" target="_blank" rel="noopener noreferrer" aria-label="TikTok"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19.6 8.1a7.1 7.1 0 0 1-4.5-1.6v8.2a5.7 5.7 0 1 1-5-5.6v3.2a2.6 2.6 0 1 0 1.9 2.5V2.5h3.1c.2 2.5 1.9 4.5 4.5 4.8v.8Z"/></svg></a>';
+    echo '</nav></div>';
     echo '<div><strong>Shop</strong><div class="footer-links"><a href="' . e(url('products.php')) . '">All products</a><a href="' . e(category_url('Plushies')) . '">Plushies</a><a href="' . e(category_url('Bags')) . '">Bags</a><a href="' . e(url('customize.php')) . '">Custom orders</a></div></div>';
     echo '<div><strong>Help</strong><div class="footer-links"><a href="' . e(url('about.php')) . '">About &amp; FAQ</a><a href="' . e(url('contact.php')) . '">Contact</a><a href="' . e(url('privacy.php')) . '">Privacy policy</a><a href="' . e(url('my_orders.php')) . '">Track an order</a></div></div>';
-    echo '</div><div class="container footer-bottom"><p>&copy; ' . date('Y') . ' Norbooz Crochet. Payments are arranged by PayID or bank transfer; this website never collects card details.</p></div>';
+    echo '</div><div class="container footer-bottom"><p>&copy; ' . date('Y') . ' Norbooz Crochet. Online payments are processed by the selected provider; this website never collects card details.</p></div>';
     echo '</footer></body></html>';
 }
 

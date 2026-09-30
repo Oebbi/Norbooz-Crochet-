@@ -1,6 +1,6 @@
 <?php
 /**
- * Upgrades an existing version 2 database to version 3 WITHOUT deleting customers, products or orders.
+ * Upgrades an existing version 2 or 3 database to version 4 WITHOUT deleting customers, products or orders.
  * Works on MariaDB (XAMPP) and MySQL 8. Safe to run more than once: each change is only made if needed.
  *
  * Run it once after copying the new files:
@@ -36,6 +36,11 @@ if ($run) {
             $s->execute([$table, $column]);
             return (int)$s->fetchColumn() > 0;
         };
+        $indexExists = function (string $table, string $index) use ($pdo): bool {
+            $s = $pdo->prepare('SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?');
+            $s->execute([$table, $index]);
+            return (int)$s->fetchColumn() > 0;
+        };
         $addColumn = function (string $table, string $column, string $definition) use ($pdo, $columnExists, &$log) {
             if (!$columnExists($table, $column)) {
                 $pdo->exec("ALTER TABLE `$table` ADD COLUMN `$column` $definition");
@@ -64,6 +69,14 @@ if ($run) {
         }
         $addColumn('orders', 'delivery_method', "ENUM('pickup','post') NOT NULL DEFAULT 'post' AFTER `subtotal_amount`");
         $addColumn('orders', 'delivery_fee', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER `delivery_method`');
+        $addColumn('orders', 'payment_status', "ENUM('unpaid','paid','manual','failed','refunded') NOT NULL DEFAULT 'manual'");
+        $addColumn('orders', 'payment_provider', "ENUM('stripe','paypal','manual') NOT NULL DEFAULT 'manual'");
+        $addColumn('orders', 'payment_reference', 'VARCHAR(255) NULL');
+        $addColumn('orders', 'paid_at', 'DATETIME NULL');
+        if (!$indexExists('orders', 'uq_orders_payment_reference')) {
+            $pdo->exec('ALTER TABLE orders ADD UNIQUE KEY uq_orders_payment_reference (payment_provider, payment_reference)');
+            $log[] = 'Added unique payment reference index';
+        }
         $addColumn('orders', 'updated_at', 'DATETIME NULL');
         $pdo->exec("ALTER TABLE custom_requests MODIFY status ENUM('new','reviewing','quoted','accepted','declined','completed') NOT NULL DEFAULT 'new'");
         $addColumn('custom_requests', 'quoted_price', 'DECIMAL(10,2) NULL');
@@ -114,7 +127,7 @@ if ($cli) {
 page_header('Upgrade database');
 ?>
 <section class="form-card narrow">
-    <h1>Upgrade database to version 3</h1>
+    <h1>Upgrade database to version 4</h1>
     <p>Adds the new tables and columns and links products to the optimised photos. Customers, products and orders are kept.</p>
     <?= render_errors($errors) ?>
     <?php if ($log): ?><div class="alert alert-success"><ul><?php foreach ($log as $line): ?><li><?= e($line) ?></li><?php endforeach; ?></ul></div>
