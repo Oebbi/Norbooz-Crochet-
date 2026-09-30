@@ -1,85 +1,74 @@
 <?php
 require_once __DIR__ . '/config/functions.php';
 
-if (current_user()) {
-    redirect('index.php');
-}
-
 $token = trim((string)($_GET['token'] ?? $_POST['token'] ?? ''));
 $errors = [];
 $reset = null;
 
 try {
-    ensure_password_resets_table();
     if (preg_match('/^[a-f0-9]{64}$/', $token)) {
         $stmt = db()->prepare(
-            'SELECT reset_id, user_id FROM password_resets
-             WHERE token_hash = ? AND used_at IS NULL AND expires_at > NOW() LIMIT 1'
+            'SELECT r.reset_id, r.user_id, u.email, u.full_name FROM password_resets r JOIN users u ON u.user_id = r.user_id
+             WHERE r.token_hash = ? AND r.used_at IS NULL AND r.expires_at > NOW() AND u.is_deleted = 0 LIMIT 1'
         );
         $stmt->execute([hash('sha256', $token)]);
-        $reset = $stmt->fetch();
+        $reset = $stmt->fetch() ?: null;
     }
 } catch (Throwable $ex) {
     $errors[] = 'Password reset is temporarily unavailable. Please request a new link later.';
 }
 
 if (!$reset && !$errors) {
-    $errors[] = 'This password reset link is invalid or has expired. Request a new link and try again.';
+    $errors[] = 'This reset link is invalid, already used or expired. Please request a new one.';
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $reset && !$errors) {
     verify_csrf();
-    $password = (string)($_POST['password'] ?? '');
-    $confirm = (string)($_POST['confirm_password'] ?? '');
-
-    if (strlen($password) < 8 || strlen($password) > 72) {
-        $errors[] = 'Password must be between 8 and 72 characters.';
-    }
-    if ($password !== $confirm) {
-        $errors[] = 'Passwords do not match.';
-    }
+    $errors = password_problems((string)($_POST['password'] ?? ''), (string)($_POST['confirm_password'] ?? ''));
 
     if (!$errors) {
+        $pdo = db();
         try {
-            $pdo = db();
             $pdo->beginTransaction();
-            $update = $pdo->prepare('UPDATE users SET password_hash = ? WHERE user_id = ?');
-            $update->execute([password_hash($password, PASSWORD_DEFAULT), (int)$reset['user_id']]);
-            $markUsed = $pdo->prepare('UPDATE password_resets SET used_at = NOW() WHERE reset_id = ?');
-            $markUsed->execute([(int)$reset['reset_id']]);
+            $pdo->prepare('UPDATE users SET password_hash = ?, password_changed_at = NOW() WHERE user_id = ?')
+                ->execute([password_hash((string)$_POST['password'], PASSWORD_DEFAULT), (int)$reset['user_id']]);
+            $pdo->prepare('UPDATE password_resets SET used_at = NOW() WHERE reset_id = ?')->execute([(int)$reset['reset_id']]);
             $pdo->prepare('DELETE FROM password_resets WHERE user_id = ? AND reset_id <> ?')->execute([(int)$reset['user_id'], (int)$reset['reset_id']]);
+            $pdo->prepare('DELETE FROM login_attempts WHERE email = ?')->execute([$reset['email']]);
             $pdo->commit();
+            send_email($reset['email'], 'Your password was changed', "Hi {$reset['full_name']},\n\nYour Norbooz Crochet password was just changed. If this was not you, contact us immediately at " . SHOP_EMAIL . '.');
+            if (current_user()) {
+                $_SESSION = [];
+                session_regenerate_id(true);
+            }
             flash('success', 'Your password has been changed. Please log in with your new password.');
             redirect('login.php');
         } catch (Throwable $ex) {
-            if (db()->inTransaction()) {
-                db()->rollBack();
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
             }
-            $errors[] = 'Your password could not be changed. Please request a new reset link.';
+            $errors[] = 'Your password could not be changed. Please request a new link.';
         }
     }
 }
 
-page_header('Reset Password');
+page_header('Reset password');
 ?>
 <section class="form-card narrow">
     <h1>Choose a new password</h1>
-    <p>Use a password between 8 and 72 characters.</p>
-
-    <?php if ($errors): ?>
-        <div class="alert alert-error" role="alert">
-            <ul><?php foreach ($errors as $error): ?><li><?= e($error) ?></li><?php endforeach; ?></ul>
-        </div>
-    <?php if (!$reset): ?><p><a href="<?= e(url('forgot_password.php')) ?>">Request another reset link</a></p><?php endif; ?>
-    <?php elseif ($reset): ?>
+    <?= render_errors($errors) ?>
+    <?php if (!$reset): ?>
+        <p><a class="button" href="<?= e(url('forgot_password.php')) ?>">Request a new link</a></p>
+    <?php else: ?>
+        <p>Resetting the password for <strong><?= e($reset['email']) ?></strong>.</p>
         <form method="post">
             <?= csrf_input() ?>
             <input type="hidden" name="token" value="<?= e($token) ?>">
-            <label for="password">New password</label>
-            <input id="password" type="password" name="password" minlength="8" maxlength="72" autocomplete="new-password" required>
+            <label for="password">New password <span class="hint">(at least 10 characters, with a letter and a number)</span></label>
+            <input id="password" type="password" name="password" minlength="10" maxlength="72" autocomplete="new-password" required>
             <label for="confirm_password">Confirm new password</label>
-            <input id="confirm_password" type="password" name="confirm_password" minlength="8" maxlength="72" autocomplete="new-password" required>
-            <button class="button" type="submit">Change password</button>
+            <input id="confirm_password" type="password" name="confirm_password" minlength="10" maxlength="72" autocomplete="new-password" required>
+            <button class="button button-block" type="submit">Change password</button>
         </form>
     <?php endif; ?>
 </section>

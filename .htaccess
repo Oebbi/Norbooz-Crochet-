@@ -1,4 +1,6 @@
+# Norbooz Crochet - Apache settings (XAMPP and most shared hosts)
 Options -Indexes
+DirectoryIndex index.php
 
 <IfModule mod_headers.c>
     Header always set X-Content-Type-Options "nosniff"
@@ -6,6 +8,21 @@ Options -Indexes
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
 </IfModule>
 
-<FilesMatch "(^\.|\.(sql|log|ini|env)$)">
+# Block hidden files, database dumps, logs, config and documentation files.
+<FilesMatch "(^\.|\.(sql|log|ini|env|md|txt|bak|dist)$|^local(\.example)?\.php$)">
     Require all denied
 </FilesMatch>
+
+# Cache optimised images and styles in the browser for a week.
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/jpeg "access plus 7 days"
+    ExpiresByType image/svg+xml "access plus 7 days"
+    ExpiresByType text/css "access plus 7 days"
+    ExpiresByType application/javascript "access plus 7 days"
+</IfModule>
+
+# Uncomment on the live server once an SSL certificate is installed, to force HTTPS:
+# RewriteEngine On
+# RewriteCond %{HTTPS} off
+# RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]

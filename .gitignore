@@ -1,6 +1,19 @@
+# Secrets and server-specific settings
 config/local.php
+
+# Runtime data (customer uploads, email log) - never commit personal data
+storage/*
+!storage/.htaccess
+!storage/uploads/
+storage/uploads/*
+!storage/uploads/.gitkeep
+
+# Admin-uploaded product photos are content, not code
+assets/images/products/upload-*
+
 *.log
 *.sql.bak
 /backups/
 .DS_Store
 Thumbs.db
+__MACOSX/
