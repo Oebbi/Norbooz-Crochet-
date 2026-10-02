@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config/functions.php';
+require_once __DIR__ . '/config/payments.php';
 
 // Installation diagnostics are only shown on the computer running the site, or to the administrator.
 if (!is_local_request() && !is_admin()) {
@@ -14,11 +15,10 @@ $add = function (string $label, bool $ok, string $help = '', bool $warningOnly =
 
 $add('PHP version 8.1 or newer (found ' . PHP_VERSION . ')', version_compare(PHP_VERSION, '8.1', '>='), 'Use XAMPP 8.1 or newer.');
 $add('PDO MySQL extension', extension_loaded('pdo_mysql'), 'Enable extension=pdo_mysql in php.ini.');
-$onlinePaymentsConfigured = STRIPE_SECRET_KEY !== '' || (PAYPAL_CLIENT_ID !== '' && PAYPAL_CLIENT_SECRET !== '');
+$onlinePaymentsConfigured = PAYPAL_CLIENT_ID !== '' && PAYPAL_CLIENT_SECRET !== '';
 $add('cURL extension for online payments', !$onlinePaymentsConfigured || extension_loaded('curl'), 'Enable extension=curl in php.ini and restart Apache.', !$onlinePaymentsConfigured);
-$paymentCredentialsReady = (STRIPE_SECRET_KEY !== '' && STRIPE_WEBHOOK_SECRET !== '')
-    || (PAYPAL_CLIENT_ID !== '' && PAYPAL_CLIENT_SECRET !== '' && PAYPAL_WEBHOOK_ID !== '');
-$add('HTTPS public URL for hosted payments', !$paymentCredentialsReady || str_starts_with(APP_URL, 'https://'), 'Set APP_URL to the public HTTPS address configured with the payment providers.', !$paymentCredentialsReady);
+$paymentCredentialsReady = PAYPAL_CLIENT_ID !== '' && PAYPAL_CLIENT_SECRET !== '' && PAYPAL_WEBHOOK_ID !== '';
+$add('HTTPS public URL for hosted payments', !$paymentCredentialsReady || str_starts_with(APP_URL, 'https://'), 'Set APP_URL to the public HTTPS address configured with PayPal.', !$paymentCredentialsReady);
 $add('mbstring extension', extension_loaded('mbstring'), 'Enable extension=mbstring in php.ini.');
 $add('fileinfo extension (checks uploaded files)', extension_loaded('fileinfo'), 'Enable extension=fileinfo in php.ini.', true);
 $add('GD extension (resizes uploaded photos)', extension_loaded('gd'), 'Enable extension=gd in php.ini, then restart Apache. Without it, uploads are stored at full size.', true);
@@ -42,9 +42,15 @@ try {
         $pdo->query('SELECT delivery_method, subtotal_amount FROM orders LIMIT 1');
         $pdo->query('SELECT password_changed_at, is_deleted FROM users LIMIT 1');
         $pdo->query('SELECT payment_status, payment_provider, payment_reference, paid_at FROM orders LIMIT 1');
-        $add('Database is version 4', true);
+        $pdo->query('SELECT brand, age_range, colour, theme, dimensions FROM products LIMIT 1');
+        $providerColumn = $pdo->query("SHOW COLUMNS FROM orders LIKE 'payment_provider'")->fetch();
+        $providerType = (string)($providerColumn['Type'] ?? '');
+        if (!str_contains($providerType, "'card'") || str_contains($providerType, "'stripe'")) {
+            throw new RuntimeException('Payment provider schema needs version 6 migration.');
+        }
+        $add('Database is version 6', true);
     } catch (Throwable $ex) {
-        $add('Database is version 4', false, 'Back up the database, then open upgrade.php to add the new columns.');
+        $add('Database is version 6', false, 'Back up the database, then open upgrade.php to update the payment provider schema.');
     }
     $admins = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
     $add('Administrator account exists', $admins > 0, 'Re-import the database file.');

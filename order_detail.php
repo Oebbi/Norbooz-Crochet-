@@ -112,7 +112,7 @@ page_header('Order #' . $orderId);
         <h2>Delivery details</h2>
         <p><?= e($order['phone']) ?><br><?= nl2br(e($order['address'])) ?></p>
         <h2>Payment</h2>
-        <p><strong><?= e(format_status($order['payment_status'])) ?></strong><br><?= e(match ($order['payment_provider']) { 'stripe' => 'Card, Apple Pay or Afterpay', 'paypal' => 'PayPal', default => 'PayID or bank transfer' }) ?><?= $order['paid_at'] ? '<br>Paid ' . e(format_date($order['paid_at'])) : '' ?></p>
+        <p><strong><?= e(format_status($order['payment_status'])) ?></strong><br><?= e(match ($order['payment_provider']) { 'paypal' => 'PayPal', 'card' => 'Card payment (retired)', default => 'PayID or bank transfer' }) ?><?= $order['paid_at'] ? '<br>Paid ' . e(format_date($order['paid_at'])) : '' ?></p>
         <h2>History</h2>
         <ol class="timeline">
             <?php foreach ($history as $event): ?>

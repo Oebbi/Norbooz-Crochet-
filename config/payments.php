@@ -10,9 +10,6 @@ function online_payment_options(): array
             'demo_paypal' => 'PayPal sample (no charge)',
         ];
     }
-    if (STRIPE_SECRET_KEY !== '' && STRIPE_WEBHOOK_SECRET !== '' && function_exists('curl_init')) {
-        $options['stripe'] = 'Card, Apple Pay or Afterpay (where available)';
-    }
     if (PAYPAL_CLIENT_ID !== '' && PAYPAL_CLIENT_SECRET !== '' && PAYPAL_WEBHOOK_ID !== '' && function_exists('curl_init')) {
         $options['paypal'] = 'PayPal';
     }
@@ -40,7 +37,6 @@ function payment_icon(string $method): string
         'demo_apple_pay' => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' . $apple . '</svg>',
         'demo_afterpay' => '<svg viewBox="0 0 32 24" aria-hidden="true" focusable="false"><path d="M3 3h12.5c7 0 11.5 3.7 11.5 9s-4.5 9-11.5 9H3V3Zm5 5v8h7.5c3.8 0 6-1.3 6-4s-2.2-4-6-4H8Z"/><path d="M3 3h5v18H3z" opacity=".45"/></svg>',
         'demo_paypal' => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 3h7.1c4 0 6 2.1 5.4 5.7-.6 3.7-3.2 5.5-7.2 5.5h-2.1l-1 5.8H5.8L8 3Zm4.2 4-1 4h2.1c1.7 0 2.7-.7 3-2.2.2-1.2-.4-1.8-2-1.8h-2.1Z"/><path d="m5.9 5.3-2.3 13.4h4.2l.4-2.2h2.4l.6-3.5H8.8l1.3-7.7H5.9Z" opacity=".58"/></svg>',
-        'stripe' => '<svg viewBox="0 0 32 24" aria-hidden="true" focusable="false">' . $apple . '<path d="M20 5h9v14h-9z" opacity=".35"/></svg>',
         'paypal' => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 3h7.1c4 0 6 2.1 5.4 5.7-.6 3.7-3.2 5.5-7.2 5.5h-2.1l-1 5.8H5.8L8 3Zm4.2 4-1 4h2.1c1.7 0 2.7-.7 3-2.2.2-1.2-.4-1.8-2-1.8h-2.1Z"/><path d="m5.9 5.3-2.3 13.4h4.2l.4-2.2h2.4l.6-3.5H8.8l1.3-7.7H5.9Z" opacity=".58"/></svg>',
         default => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="2.5" y="5" width="19" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 9h18" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
     };
@@ -78,20 +74,6 @@ function payment_http(string $url, string $method, array $headers, string $body 
     return $data;
 }
 
-function stripe_request(string $method, string $path, array $params = []): array
-{
-    $body = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
-    $url = 'https://api.stripe.com/v1/' . ltrim($path, '/');
-    if ($method === 'GET' && $body !== '') {
-        $url .= '?' . $body;
-        $body = '';
-    }
-    return payment_http($url, $method, [
-        'Authorization: Basic ' . base64_encode(STRIPE_SECRET_KEY . ':'),
-        'Content-Type: application/x-www-form-urlencoded',
-    ], $body);
-}
-
 function paypal_api_base(): string
 {
     return PAYPAL_MODE === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
@@ -121,28 +103,6 @@ function paypal_request(string $method, string $path, array $payload = []): arra
 
 function create_payment_session(string $provider, int $orderId, int $amountCents, string $email): array
 {
-    if ($provider === 'stripe') {
-        $session = stripe_request('POST', 'checkout/sessions', [
-            'mode' => 'payment',
-            'customer_email' => $email,
-            'client_reference_id' => (string)$orderId,
-            'metadata[order_id]' => (string)$orderId,
-            'line_items[0][quantity]' => '1',
-            'line_items[0][price_data][currency]' => 'aud',
-            'line_items[0][price_data][unit_amount]' => (string)$amountCents,
-            'line_items[0][price_data][product_data][name]' => 'Norbooz Crochet order #' . $orderId,
-            'success_url' => absolute_url('payment_return.php?provider=stripe&order_id=' . $orderId . '&session_id={CHECKOUT_SESSION_ID}'),
-            'cancel_url' => absolute_url('payment_cancel.php?provider=stripe&order_id=' . $orderId),
-        ]);
-        if (empty($session['id']) || empty($session['url'])) {
-            throw new RuntimeException('Stripe did not create a checkout session.');
-        }
-        if (parse_url((string)$session['url'], PHP_URL_HOST) !== 'checkout.stripe.com') {
-            throw new RuntimeException('Stripe returned an unexpected checkout address.');
-        }
-        return ['reference' => (string)$session['id'], 'url' => (string)$session['url']];
-    }
-
     if ($provider === 'paypal') {
         $order = paypal_request('POST', 'checkout/orders', [
             'intent' => 'CAPTURE',
@@ -261,15 +221,7 @@ function complete_provider_payment(string $provider, int $orderId, string $refer
         }
 
         $amountCents = (int)round((float)$order['total_amount'] * 100);
-        if ($provider === 'stripe') {
-            $session = stripe_request('GET', 'checkout/sessions/' . rawurlencode($reference));
-            if (($session['payment_status'] ?? '') !== 'paid'
-                || (string)($session['client_reference_id'] ?? '') !== (string)$orderId
-                || (int)($session['amount_total'] ?? 0) !== $amountCents
-                || strtolower((string)($session['currency'] ?? '')) !== 'aud') {
-                throw new RuntimeException('Stripe has not confirmed this payment.');
-            }
-        } elseif ($provider === 'paypal') {
+        if ($provider === 'paypal') {
             $capture = paypal_request('POST', 'checkout/orders/' . rawurlencode($reference) . '/capture');
             $purchase = $capture['purchase_units'][0] ?? [];
             $captureDetails = $purchase['payments']['captures'][0] ?? [];

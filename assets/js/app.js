@@ -28,6 +28,61 @@ document.addEventListener('DOMContentLoaded', () => {
     if (desktop.addEventListener) desktop.addEventListener('change', reset); else desktop.addListener(reset);
   }
 
+  document.querySelectorAll('[data-product-zoom]').forEach((zoom) => {
+    const trigger = zoom.querySelector('[data-zoom-trigger]');
+    const image = trigger && trigger.querySelector('img');
+    const lens = zoom.querySelector('.product-zoom-lens');
+    const preview = zoom.querySelector('[data-zoom-preview]');
+    const label = zoom.querySelector('[data-zoom-label]');
+    if (!trigger || !image || !lens || !preview || !label) return;
+
+    let pinned = false;
+    const setActive = (active) => zoom.classList.toggle('is-zoom-active', active);
+    const setPinned = (active) => {
+      pinned = active;
+      trigger.setAttribute('aria-pressed', String(pinned));
+      trigger.setAttribute('aria-label', pinned ? 'Close magnified product image' : 'Zoom product image');
+      label.textContent = pinned ? 'Close zoom' : 'Zoom image';
+      setActive(pinned);
+    };
+    const positionLens = (event) => {
+      const bounds = trigger.getBoundingClientRect();
+      if (!bounds.width || !bounds.height) return;
+      const x = Math.max(0, Math.min(event.clientX - bounds.left, bounds.width));
+      const y = Math.max(0, Math.min(event.clientY - bounds.top, bounds.height));
+      const lensWidth = lens.offsetWidth;
+      const lensHeight = lens.offsetHeight;
+      lens.style.left = `${Math.max(0, Math.min(x - lensWidth / 2, bounds.width - lensWidth))}px`;
+      lens.style.top = `${Math.max(0, Math.min(y - lensHeight / 2, bounds.height - lensHeight))}px`;
+      preview.style.backgroundPosition = `${(x / bounds.width) * 100}% ${(y / bounds.height) * 100}%`;
+    };
+    const updatePreviewImage = () => {
+      preview.style.backgroundImage = `url(${JSON.stringify(image.currentSrc || image.src)})`;
+    };
+
+    preview.style.backgroundSize = '250% auto';
+    updatePreviewImage();
+    image.addEventListener('load', updatePreviewImage);
+    trigger.addEventListener('pointerenter', (event) => {
+      if (event.pointerType === 'touch') return;
+      setActive(true);
+      positionLens(event);
+    });
+    trigger.addEventListener('pointermove', (event) => {
+      if (event.pointerType !== 'touch') positionLens(event);
+    });
+    trigger.addEventListener('pointerleave', () => {
+      if (!pinned) setActive(false);
+    });
+    trigger.addEventListener('click', () => setPinned(!pinned));
+    trigger.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && pinned) {
+        setPinned(false);
+        trigger.focus();
+      }
+    });
+  });
+
   // Label each table cell with its column heading so tables can stack into cards on phones.
   document.querySelectorAll('.table-wrap table').forEach((table) => {
     const heads = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());

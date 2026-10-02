@@ -5,8 +5,8 @@ require_customer();
 
 $provider = (string)($_GET['provider'] ?? '');
 $orderId = filter_var($_GET['order_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-$reference = $provider === 'stripe' ? (string)($_GET['session_id'] ?? '') : (string)($_GET['token'] ?? '');
-if (!$orderId || !in_array($provider, ['stripe', 'paypal'], true) || $reference === '') {
+$reference = (string)($_GET['token'] ?? '');
+if (!$orderId || $provider !== 'paypal' || $reference === '') {
     not_found('That payment could not be found.');
 }
 

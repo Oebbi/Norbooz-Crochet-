@@ -62,6 +62,8 @@ $tests['External redirect blocked'] = safe_next('https://evil.example') === 'ind
 $tests['Local checkout offers no-charge payment samples'] = isset($localPaymentOptions['demo_apple_pay'], $localPaymentOptions['demo_afterpay'], $localPaymentOptions['demo_paypal']);
 $tests['Public checkout never offers demo payment samples'] = !isset($publicPaymentOptions['demo_apple_pay'], $publicPaymentOptions['demo_afterpay'], $publicPaymentOptions['demo_paypal']);
 $tests['Public hostname never exposes local demo through a proxy'] = !isset($proxiedPublicPaymentOptions['demo_apple_pay'], $proxiedPublicPaymentOptions['demo_afterpay'], $proxiedPublicPaymentOptions['demo_paypal']);
+$tests['HTTP localhost is allowed for private test payment return URLs'] = is_local_http_url('http://localhost/norbooz_crochet') && is_local_http_url('http://127.0.0.1:8080/shop');
+$tests['Public HTTP is not accepted as a local test payment URL'] = !is_local_http_url('http://shop.example.com') && !is_local_http_url('https://localhost/shop');
 
 $failed = 0;
 foreach ($tests as $name => $ok) {

@@ -119,6 +119,12 @@ foreach (['index.php' => 'Home', 'products.php' => 'Shop', 'product.php?id=' . $
     $r = $guest->get($page);
     check('P' . count($results), "$label page loads (200)", $r['status'] === 200 && !preg_match('/(Fatal error|Warning:|Notice:|Deprecated:)/', $r['body']), "status {$r['status']}");
 }
+$r = $guest->get('product.php?id=' . $p1);
+$productSpecs = $pdo->query('SELECT colour, theme, dimensions FROM products WHERE is_active = 1')->fetchAll();
+$missingSpecs = array_filter($productSpecs, fn($row) => trim($row['colour']) === '' || trim($row['theme']) === '' || !preg_match('/\d+\s*x\s*\d+\s*x\s*\d+/i', $row['dimensions']));
+check('P-spec-all', 'Every active product has colour, theme, and L x W x H details', count($productSpecs) > 0 && !$missingSpecs, count($missingSpecs) . ' incomplete product(s)');
+check('P-spec', 'Product page shows 5+ guidance and product dimensions', str_contains($r['body'], 'Brand') && str_contains($r['body'], 'Age range') && str_contains($r['body'], '5 years and above') && str_contains($r['body'], ' x '));
+check('P-about', 'Product description is presented as About this item bullets', str_contains($r['body'], 'About this item') && str_contains($r['body'], 'class="product-about"') && str_contains($r['body'], '<li>'));
 $r = $guest->get('products.php?category=Plushies&sort=price_asc');
 check('P-filter', 'Category filter and sort return products', $r['status'] === 200 && str_contains($r['body'], 'product-card'));
 $r = $guest->get('products.php?q=' . rawurlencode('zzzz-no-match'));
@@ -291,12 +297,19 @@ if (function_exists('imagecreatetruecolor')) {
 }
 $admin->get('admin_product_edit.php');
 $r = $admin->request('POST', 'admin_product_edit.php', [
-    'csrf_token' => $admin->token(), 'name' => "Test Product $run", 'category' => 'Plushies', 'description' => 'Created by the automated test suite.',
+    'csrf_token' => $admin->token(), 'name' => "Test Product $run", 'brand' => 'Norbooz Crochet', 'category' => 'Plushies', 'description' => 'Created by the automated test suite.',
+    'age_range' => '5 years and above (seller guidance; not a safety certification)', 'colour' => 'Blue', 'theme' => 'Test plush', 'dimensions' => '10 x 8 x 6 cm',
     'price' => '19.95', 'stock_qty' => '3', 'is_active' => '1', 'image_path' => '', 'image' => new CURLFile($png, 'image/png', 'test.png'),
 ], true);
-$np = $pdo->prepare('SELECT product_id, image_path FROM products WHERE name = ?'); $np->execute(["Test Product $run"]); $np = $np->fetch();
+$np = $pdo->prepare('SELECT product_id, image_path, brand, age_range, colour, theme, dimensions FROM products WHERE name = ?'); $np->execute(["Test Product $run"]); $np = $np->fetch();
 if ($np) { $createdProductIds[] = (int)$np['product_id']; }
 check('D10', 'Admin adds a product with an uploaded photo', $np && is_file(APP_ROOT . '/' . $np['image_path']), $np['image_path'] ?? 'not created');
+if ($np) {
+    check('D10-spec', 'Admin saves product specifications', $np['brand'] === 'Norbooz Crochet' && $np['age_range'] === '5 years and above (seller guidance; not a safety certification)' && $np['colour'] === 'Blue' && $np['theme'] === 'Test plush' && $np['dimensions'] === '10 x 8 x 6 cm');
+    $specPage = $guest->get('product.php?id=' . $np['product_id']);
+    check('D10-public-spec', 'Customer can read saved product specifications and description', str_contains($specPage['body'], 'Created by the automated test suite.') && str_contains($specPage['body'], 'Blue</dd>') && str_contains($specPage['body'], 'Test plush'));
+    check('D10-about', 'Admin-entered description appears as a customer-facing bullet', str_contains($specPage['body'], '<ul class="product-about">') && str_contains($specPage['body'], '<li>Created by the automated test suite.</li>'));
+}
 if ($np && function_exists('imagecreatefromstring')) {
     $size = getimagesize(APP_ROOT . '/' . $np['image_path']);
     check('D11', 'Uploaded photo is resized to 1200px and a thumbnail is created', $size[0] <= 1200 && is_file(APP_ROOT . '/' . preg_replace('/\.jpg$/', '-thumb.jpg', $np['image_path'])));
@@ -304,7 +317,7 @@ if ($np && function_exists('imagecreatefromstring')) {
 $fake = tempnam(sys_get_temp_dir(), 'bad') . '.php';
 file_put_contents($fake, '<?php echo "hacked"; ?>');
 $admin->get('admin_product_edit.php');
-$r = $admin->request('POST', 'admin_product_edit.php', ['csrf_token' => $admin->token(), 'name' => "Bad Upload $run", 'category' => 'Plushies', 'description' => 'Should be rejected by the upload validation.', 'price' => '1', 'stock_qty' => '1', 'image' => new CURLFile($fake, 'image/png', 'evil.php')], true);
+$r = $admin->request('POST', 'admin_product_edit.php', ['csrf_token' => $admin->token(), 'name' => "Bad Upload $run", 'brand' => 'Norbooz Crochet', 'category' => 'Plushies', 'description' => 'Should be rejected by the upload validation.', 'age_range' => '3+ years (assumption only)', 'colour' => 'Blue (assumed)', 'theme' => 'Test plush', 'dimensions' => 'Approx. 10 x 8 x 6 cm (assumed)', 'price' => '1', 'stock_qty' => '1', 'image' => new CURLFile($fake, 'image/png', 'evil.php')], true);
 $exists = $pdo->prepare('SELECT COUNT(*) FROM products WHERE name = ?'); $exists->execute(["Bad Upload $run"]);
 check('D12', 'A PHP file disguised as an image is rejected', (int)$exists->fetchColumn() === 0 && str_contains($r['body'], 'Only JPG, PNG, WEBP or GIF'));
 $r = $admin->submit('admin_product_edit.php', ['name' => 'X', 'category' => 'Nope', 'description' => 'short', 'price' => '-5', 'stock_qty' => 'abc']);

@@ -5,7 +5,7 @@ require_customer();
 
 $provider = (string)($_GET['provider'] ?? '');
 $orderId = filter_var($_GET['order_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-if (!$orderId || !in_array($provider, ['stripe', 'paypal'], true)) {
+if (!$orderId || $provider !== 'paypal') {
     not_found('That order could not be found.');
 }
 
@@ -14,28 +14,6 @@ $stmt->execute([$orderId, current_user()['user_id'], $provider]);
 $order = $stmt->fetch();
 if (!$order) {
     not_found('That order could not be found.');
-}
-
-if ($provider === 'stripe' && $order['payment_reference'] && $order['payment_status'] === 'unpaid') {
-    try {
-        $session = stripe_request('GET', 'checkout/sessions/' . rawurlencode($order['payment_reference']));
-        if (($session['payment_status'] ?? '') === 'paid') {
-            mark_order_paid((int)$orderId, $provider, (string)$order['payment_reference']);
-            flash('success', 'Payment received for order #' . (int)$orderId . '.');
-            redirect('order_detail.php?id=' . (int)$orderId);
-        }
-        if (($session['status'] ?? '') === 'complete') {
-            flash('info', 'Your payment is still processing. We will update your order when the provider confirms it.');
-            redirect('order_detail.php?id=' . (int)$orderId);
-        }
-        if (($session['status'] ?? '') === 'open') {
-            stripe_request('POST', 'checkout/sessions/' . rawurlencode($order['payment_reference']) . '/expire');
-        }
-    } catch (Throwable $ex) {
-        error_log('Could not close payment session for order #' . (int)$orderId . ': ' . $ex->getMessage());
-        flash('error', 'We could not safely close the payment session. Please contact us before trying again.');
-        redirect('order_detail.php?id=' . (int)$orderId);
-    }
 }
 
 try {

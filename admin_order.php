@@ -178,7 +178,7 @@ admin_nav();
 
         <section class="summary-card">
             <h2>Payment</h2>
-            <p><strong><?= e(format_status($order['payment_status'])) ?></strong><br><?= e(match ($order['payment_provider']) { 'stripe' => 'Card, Apple Pay or Afterpay', 'paypal' => 'PayPal', default => 'PayID or bank transfer' }) ?><?= $order['paid_at'] ? '<br>Paid ' . e(format_date($order['paid_at'])) : '' ?></p>
+            <p><strong><?= e(format_status($order['payment_status'])) ?></strong><br><?= e(match ($order['payment_provider']) { 'paypal' => 'PayPal', 'card' => 'Card payment (retired)', default => 'PayID or bank transfer' }) ?><?= $order['paid_at'] ? '<br>Paid ' . e(format_date($order['paid_at'])) : '' ?></p>
         </section>
 
         <?php if (in_array($order['status'], ['pending', 'in_progress', 'ready'], true)): ?>

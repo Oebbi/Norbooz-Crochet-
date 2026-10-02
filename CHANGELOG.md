@@ -1,5 +1,14 @@
 # Changelog
 
+## Version 3.4 (October 2026)
+
+### Product details
+- Added editable brand, age guidance, colour, theme and dimensions to product listings
+- Replaced untouched starter copy with product-specific descriptions while preserving customized descriptions
+- Added product-specific colour, theme, and L x W x H details with 5+ seller guidance
+- Displayed product descriptions as an About this item bullet list; admins can enter one point per line
+- Added a version 5 database upgrade that preserves existing customers, products and orders
+
 ## Version 3.3 (September 2026)
 
 ### Online payments

@@ -15,14 +15,7 @@ $cardCategory = canonical_product_category((string)$product['category']);
         <div class="product-meta">
             <strong><?= money($product['price']) ?></strong>
             <?php if ($cardStock > 0 && !is_admin()): ?>
-                <form method="post" action="<?= e(url('cart.php')) ?>" class="inline-form">
-                    <?= csrf_input() ?>
-                    <input type="hidden" name="action" value="add">
-                    <input type="hidden" name="product_id" value="<?= $cardId ?>">
-                    <input type="hidden" name="quantity" value="1">
-                    <input type="hidden" name="return" value="<?= e(current_request_path()) ?>">
-                    <button class="button button-small" type="submit" aria-label="Add to cart: <?= e($product['name']) ?>">Add to cart</button>
-                </form>
+                <a class="button button-small" href="<?= e(url('product.php?id=' . $cardId)) ?>">View details</a>
             <?php elseif ($cardStock < 1): ?>
                 <a class="text-link small" href="<?= e(url('customize.php?based_on=' . $cardId)) ?>">Request one</a>
             <?php endif; ?>

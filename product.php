@@ -16,6 +16,7 @@ if (!$product) {
 $category = canonical_product_category((string)$product['category']);
 $stock = (int)$product['stock_qty'];
 $inCart = (int)(cart()[$id] ?? 0);
+$descriptionItems = preg_split('/(?:\R+|(?<=[.!?])\s+)/u', trim((string)$product['description'])) ?: [];
 
 $related = db()->prepare(
     'SELECT product_id, name, category, price, stock_qty, image_path FROM products
@@ -34,8 +35,13 @@ page_header($product['name'], mb_substr((string)$product['description'], 0, 155)
 </nav>
 
 <section class="product-detail">
-    <div class="product-detail-image">
-        <img src="<?= e(url(product_image($product['image_path'], $category))) ?>" alt="<?= e($product['name']) ?>, handmade crochet <?= e(strtolower($category)) ?>">
+    <div class="product-detail-image" data-product-zoom>
+        <button class="product-zoom-trigger" type="button" data-zoom-trigger aria-label="Zoom product image" aria-pressed="false">
+            <img src="<?= e(url(product_image($product['image_path'], $category))) ?>" alt="<?= e($product['name']) ?>, handmade crochet <?= e(strtolower($category)) ?>">
+            <span class="product-zoom-lens" aria-hidden="true"></span>
+            <span class="product-zoom-label" data-zoom-label aria-hidden="true">Zoom image</span>
+        </button>
+        <div class="product-zoom-preview" data-zoom-preview aria-hidden="true"></div>
     </div>
     <div class="product-detail-info">
         <p class="eyebrow"><?= e($category) ?></p>
@@ -44,7 +50,20 @@ page_header($product['name'], mb_substr((string)$product['description'], 0, 155)
         <p class="stock-line <?= $stock < 1 ? 'is-out' : ($stock <= LOW_STOCK_LEVEL ? 'is-low' : '') ?>">
             <?= $stock < 1 ? 'Sold out' : ($stock <= LOW_STOCK_LEVEL ? 'Only ' . $stock . ' left' : 'In stock') ?>
         </p>
-        <p class="product-description"><?= nl2br(e($product['description'])) ?></p>
+        <h2 class="product-specs-heading">Product details</h2>
+        <dl class="detail-list product-specs">
+            <div><dt>Brand</dt><dd><?= e($product['brand']) ?></dd></div>
+            <div><dt>Age range</dt><dd><?= e($product['age_range']) ?></dd></div>
+            <div><dt>Colour</dt><dd><?= e($product['colour']) ?></dd></div>
+            <div><dt>Theme</dt><dd><?= e($product['theme']) ?></dd></div>
+            <div><dt>Item dimensions (L x W x H)</dt><dd><?= e($product['dimensions']) ?></dd></div>
+        </dl>
+        <h2 class="product-specs-heading">About this item</h2>
+        <ul class="product-about">
+            <?php foreach ($descriptionItems as $descriptionItem): ?>
+                <?php if (trim($descriptionItem) !== ''): ?><li><?= e(trim($descriptionItem)) ?></li><?php endif; ?>
+            <?php endforeach; ?>
+        </ul>
 
         <?php if (is_admin()): ?>
             <a class="button" href="<?= e(url('admin_product_edit.php?id=' . $id)) ?>">Edit this product</a>

@@ -201,7 +201,7 @@ page_header('Checkout');
             <?php foreach ($paymentOptions as $method => $label): ?>
                 <label class="radio-card payment-radio-card"><input type="radio" name="payment_method" value="<?= e($method) ?>" <?= $form['payment_method'] === $method ? 'checked' : '' ?> required>
                     <span class="payment-option-icon"><?= payment_icon($method) ?></span>
-                    <span class="payment-option-copy"><strong><?= e($label) ?></strong><span class="small-text"><?= $method === 'manual' ? 'We will email payment instructions after your order.' : (str_starts_with($method, 'demo_') ? 'Local sample only. No payment will be taken.' : 'You will pay securely on ' . ($method === 'stripe' ? 'Stripe' : 'PayPal') . '.') ?></span></span></label>
+                    <span class="payment-option-copy"><strong><?= e($label) ?></strong><span class="small-text"><?= $method === 'manual' ? 'We will email payment instructions after your order.' : (str_starts_with($method, 'demo_') ? 'Local sample only. No payment will be taken.' : 'You will pay securely through PayPal.') ?></span></span></label>
             <?php endforeach; ?>
         </fieldset>
 

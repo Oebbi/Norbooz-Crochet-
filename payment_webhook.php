@@ -21,47 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $provider = (string)($_GET['provider'] ?? '');
 $payload = (string)file_get_contents('php://input');
 try {
-    if ($provider === 'stripe') {
-        if (STRIPE_WEBHOOK_SECRET === '') {
-            throw new RuntimeException('Stripe webhook secret is missing.');
-        }
-        $parts = [];
-        foreach (explode(',', (string)($_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '')) as $part) {
-            [$key, $value] = array_pad(explode('=', trim($part), 2), 2, '');
-            $parts[$key][] = $value;
-        }
-        $timestamp = (int)($parts['t'][0] ?? 0);
-        $signature = hash_hmac('sha256', $timestamp . '.' . $payload, STRIPE_WEBHOOK_SECRET);
-        $timestampValid = $timestamp > 0 && abs(time() - $timestamp) <= 300;
-        $valid = false;
-        foreach ($parts['v1'] ?? [] as $candidate) {
-            $valid = $valid || ($timestampValid && hash_equals($signature, $candidate));
-        }
-        if (!$valid) {
-            http_response_code(400);
-            exit;
-        }
-        $event = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
-        $session = $event['data']['object'] ?? [];
-        $eventType = (string)($event['type'] ?? '');
-        $orderId = (int)($session['client_reference_id'] ?? 0);
-        $reference = (string)($session['id'] ?? '');
-        if (in_array($eventType, ['checkout.session.expired', 'checkout.session.async_payment_failed'], true)
-            && $orderId > 0 && $reference !== '') {
-            cancel_provider_order($orderId, 'stripe', $reference, 'Stripe checkout expired or failed');
-        }
-        if (in_array($eventType, ['checkout.session.completed', 'checkout.session.async_payment_succeeded'], true)
-            && ($session['payment_status'] ?? '') === 'paid') {
-            $amount = (int)($session['amount_total'] ?? 0);
-            if (strtolower((string)($session['currency'] ?? '')) !== 'aud'
-                || (string)($session['metadata']['order_id'] ?? '') !== (string)$orderId
-                || !webhook_order_matches($orderId, 'stripe', $reference, $amount)) {
-                http_response_code(400);
-                exit;
-            }
-            mark_order_paid($orderId, 'stripe', $reference);
-        }
-    } elseif ($provider === 'paypal') {
+    if ($provider === 'paypal') {
         if (PAYPAL_WEBHOOK_ID === '') {
             throw new RuntimeException('PayPal webhook ID is missing.');
         }
