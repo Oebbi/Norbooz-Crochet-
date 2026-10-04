@@ -414,6 +414,119 @@ $r = $c->request('POST', 'admin_customers.php', ['user_id' => $uidC, 'csrf_token
 check('U18', 'A customer cannot open the admin customer list', $r['status'] !== 200);
 
 /* ---------------------------------------------------------------- */
+heading('Online payments');
+require_once __DIR__ . '/../config/payments.php';
+$emailD = "test-d-$run@example.test";
+$d = new Browser($base);
+register($d, 'Test Customer D', $emailD);
+$uidD = (int)$pdo->query("SELECT user_id FROM users WHERE email = " . $pdo->quote($emailD))->fetchColumn();
+$orderRow = function (int $id) use ($pdo): array { $q = $pdo->prepare('SELECT status, payment_status, payment_provider, payment_reference, paid_at FROM orders WHERE order_id = ?'); $q->execute([$id]); return $q->fetch() ?: []; };
+/** Add one of product $p1 to the cart and check out with the given payment method. Returns [response, order id]. */
+$payOrder = function (Browser $br, string $method) use ($p1, $pdo, $uidD): array {
+    $br->submit('product.php?id=' . $p1, ['action' => 'add', 'product_id' => $p1, 'quantity' => 1, 'return' => 'cart.php'], 'cart.php');
+    $br->get('checkout.php');
+    $r = $br->request('POST', 'checkout.php', ['csrf_token' => $br->token(), 'checkout_token' => $br->field('checkout_token'), 'delivery_method' => 'pickup', 'payment_method' => $method, 'phone' => '0412 345 678', 'address' => '', 'accept_terms' => '1']);
+    return [$r, (int)$pdo->query("SELECT COALESCE(MAX(order_id), 0) FROM orders WHERE user_id = $uidD")->fetchColumn()];
+};
+$decide = function (Browser $br, int $orderId, string $decision): array {
+    $br->get('payment_demo.php?order_id=' . $orderId);
+    return $br->request('POST', 'payment_demo.php', ['csrf_token' => $br->token(), 'order_id' => $orderId, 'decision' => $decision]);
+};
+
+$d->submit('product.php?id=' . $p1, ['action' => 'add', 'product_id' => $p1, 'quantity' => 1, 'return' => 'cart.php'], 'cart.php');
+$r = $d->get('checkout.php');
+check('Y1', 'Checkout offers PayID/bank transfer and, on localhost, the payment simulator', str_contains($r['body'], 'value="manual"') && str_contains($r['body'], 'value="demo_paypal"') && str_contains($r['body'], 'No money is taken'));
+check('Y2', 'Security policy lets the checkout form hand over to PayPal and nowhere else', (bool)preg_match("/form-action 'self' https:\/\/www\.paypal\.com https:\/\/www\.sandbox\.paypal\.com;/", $r['headers']));
+$r = $d->request('POST', 'checkout.php', ['csrf_token' => $d->token(), 'checkout_token' => $d->field('checkout_token'), 'delivery_method' => 'pickup', 'payment_method' => 'bitcoin', 'phone' => '0412 345 678', 'address' => '', 'accept_terms' => '1']);
+check('Y3', 'An unknown payment method is rejected and no order is created', str_contains($r['body'], 'available payment method') && (int)$pdo->query("SELECT COUNT(*) FROM orders WHERE user_id = $uidD")->fetchColumn() === 0);
+$d->submit('cart.php', ['action' => 'remove', 'product_id' => $p1]);
+$pdo->exec("DELETE FROM orders WHERE user_id = $uidD");
+
+$stockBefore = stock($p1);
+[$r, $pay1] = $payOrder($d, 'demo_paypal');
+$row = $orderRow($pay1);
+check('Y4', 'Online checkout creates an unpaid order and sends the customer to the payment page', $r['status'] === 302 && str_contains($r['location'], 'payment_demo.php?order_id=' . $pay1) && ($row['payment_provider'] ?? '') === 'demo' && $row['payment_status'] === 'unpaid' && str_starts_with((string)$row['payment_reference'], 'DEMO-'));
+check('Y5', 'Stock is reserved while payment is pending', stock($p1) === $stockBefore - 1);
+$r = $d->get('payment_demo.php?order_id=' . $pay1);
+check('Y6', 'Payment page shows the amount and states that no money is taken', $r['status'] === 200 && str_contains($r['body'], 'no money is taken') && str_contains($r['body'], 'Approve simulated payment'));
+$r = $b->get('payment_demo.php?order_id=' . $pay1);
+check('Y7', "Another customer cannot open someone else's payment page", $r['status'] === 404);
+$admin->submit('admin_order.php?id=' . $pay1, ['order_id' => $pay1, 'status' => 'in_progress']);
+check('Y8', 'The shop cannot start work on an order that is not paid', $orderRow($pay1)['status'] === 'pending');
+$r = $d->request('POST', 'payment_demo.php', ['csrf_token' => 'forged', 'order_id' => $pay1, 'decision' => 'approve']);
+check('Y9', 'A forged payment approval (no CSRF token) is rejected', $orderRow($pay1)['payment_status'] === 'unpaid');
+$r = $d->get('order_detail.php?id=' . $pay1);
+check('Y10', 'Unpaid order page offers Pay now and Cancel', str_contains($r['body'], 'Payment not completed yet') && str_contains($r['body'], 'Pay now') && str_contains($r['body'], 'Cancel this order'));
+$r = $decide($d, $pay1, 'approve');
+$row = $orderRow($pay1);
+$mail = (string)@file_get_contents(STORAGE_DIR . '/mail.log');
+check('Y11', 'Approving the payment marks the order paid with a timestamp', $row['payment_status'] === 'paid' && $row['paid_at'] !== null && $row['status'] === 'pending');
+check('Y12', 'Customer and shop are emailed that payment was received', str_contains($mail, "To: $emailD") && substr_count($mail, "Payment received for order #$pay1") >= 2);
+$r = $decide($d, $pay1, 'approve');
+check('Y13', 'A paid order cannot be paid twice (replay is ignored)', $orderRow($pay1)['payment_status'] === 'paid' && $r['status'] === 302);
+$d->submit('order_detail.php?id=' . $pay1, ['action' => 'cancel', 'order_id' => $pay1]);
+check('Y14', 'A customer cannot cancel an order that has been paid online', $orderRow($pay1)['status'] === 'pending' && stock($p1) === $stockBefore - 1);
+$admin->submit('admin_order.php?id=' . $pay1, ['order_id' => $pay1, 'status' => 'cancelled']);
+check('Y15', 'The shop cannot cancel a paid online order without recording a refund', $orderRow($pay1)['status'] === 'pending');
+$admin->submit('admin_order.php?id=' . $pay1, ['order_id' => $pay1, 'status' => 'in_progress']);
+check('Y16', 'Once paid, the shop can move the order to In Progress', $orderRow($pay1)['status'] === 'in_progress');
+$admin->submit('admin_order.php?id=' . $pay1, ['order_id' => $pay1, 'action' => 'refund', 'payment_note' => 'Test refund']);
+check('Y17', 'A refund must be confirmed before it is recorded', $orderRow($pay1)['payment_status'] === 'paid');
+$admin->submit('admin_order.php?id=' . $pay1, ['order_id' => $pay1, 'action' => 'refund', 'payment_note' => 'Test refund', 'confirm_refund' => '1']);
+$row = $orderRow($pay1);
+check('Y18', 'Recording a refund cancels the order, marks it refunded and returns the stock', $row['status'] === 'cancelled' && $row['payment_status'] === 'refunded' && stock($p1) === $stockBefore);
+$r = $d->request('POST', 'admin_order.php?id=' . $pay1, ['csrf_token' => $d->token(), 'order_id' => $pay1, 'action' => 'refund', 'confirm_refund' => '1']);
+check('Y19', 'A customer cannot use the admin payment actions', $r['status'] !== 200);
+
+[$r, $pay2] = $payOrder($d, 'demo_apple_pay');
+$decide($d, $pay2, 'cancel');
+$row = $orderRow($pay2);
+check('Y20', 'Cancelling at the payment page cancels the order and releases the stock', $row['status'] === 'cancelled' && $row['payment_status'] === 'failed' && stock($p1) === $stockBefore);
+[$r, $pay3] = $payOrder($d, 'demo_afterpay');
+$d->submit('order_detail.php?id=' . $pay3, ['action' => 'cancel', 'order_id' => $pay3]);
+$row = $orderRow($pay3);
+check('Y21', 'A customer can cancel their own abandoned (unpaid) online order', $row['status'] === 'cancelled' && $row['payment_status'] === 'failed' && stock($p1) === $stockBefore);
+[$r, $pay4] = $payOrder($d, 'demo_paypal');
+$admin->submit('admin_order.php?id=' . $pay4, ['order_id' => $pay4, 'action' => 'cancel_unpaid']);
+$row = $orderRow($pay4);
+check('Y22', 'The shop can cancel an unpaid online order', $row['status'] === 'cancelled' && $row['payment_status'] === 'failed' && stock($p1) === $stockBefore);
+$admin->submit('admin_order.php?id=' . $pay4, ['order_id' => $pay4, 'status' => 'pending']);
+check('Y23', 'A cancelled online order cannot be re-opened without payment', $orderRow($pay4)['status'] === 'cancelled');
+[$r, $pay5] = $payOrder($d, 'demo_paypal');
+$pdo->exec("UPDATE orders SET order_date = DATE_SUB(NOW(), INTERVAL " . (payment_expiry_hours() + 1) . " HOUR) WHERE order_id = $pay5");
+[$r, $pay6] = $payOrder($d, 'demo_paypal');
+$admin->get('admin.php');
+check('Y24', 'Unpaid online orders expire automatically and their stock returns', $orderRow($pay5)['status'] === 'cancelled' && $orderRow($pay5)['payment_status'] === 'failed');
+check('Y25', 'A recent unpaid order is not expired early', $orderRow($pay6)['status'] === 'pending' && stock($p1) === $stockBefore - 1);
+$decide($d, $pay6, 'cancel');
+
+// PayPal return and cancel links, tested with an order row that looks like a PayPal checkout (no network needed).
+$pdo->prepare("INSERT INTO orders (user_id, status, subtotal_amount, delivery_method, delivery_fee, total_amount, payment_status, payment_provider, payment_reference, phone, address) VALUES (?, 'pending', 10, 'pickup', 0, 10, 'unpaid', 'paypal', ?, '0412 345 678', 'Pickup')")->execute([$uidD, "TESTREF$run"]);
+$pp = (int)$pdo->lastInsertId();
+$d->get('payment_cancel.php?provider=paypal&order_id=' . $pp);
+check('Y26', 'The PayPal cancel link does nothing without its one-time token (CSRF)', $orderRow($pp)['status'] === 'pending');
+$d->get('payment_cancel.php?provider=paypal&order_id=' . $pp . '&ct=' . str_repeat('0', 32));
+check('Y27', 'A guessed cancel token is rejected', $orderRow($pp)['status'] === 'pending');
+$d->get('payment_return.php?provider=paypal&order_id=' . $pp . '&token=WRONG');
+check('Y28', 'A PayPal return with the wrong reference does not mark the order paid', $orderRow($pp)['payment_status'] === 'unpaid');
+$r = $b->get('payment_return.php?provider=paypal&order_id=' . $pp . '&token=' . "TESTREF$run");
+check('Y29', "Another customer cannot complete someone else's payment", $orderRow($pp)['payment_status'] === 'unpaid');
+$r = $guest->get('payment_webhook.php?provider=paypal');
+check('Y30', 'Payment webhook only accepts POST', $r['status'] === 405);
+$r = $guest->request('POST', 'payment_webhook.php?provider=unknown', ['x' => 1]);
+check('Y31', 'Webhook for an unknown provider is rejected', $r['status'] === 404);
+$ch = curl_init($base . '/payment_webhook.php?provider=paypal');
+curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 40, CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+    CURLOPT_POSTFIELDS => json_encode(['event_type' => 'PAYMENT.CAPTURE.COMPLETED', 'resource' => ['amount' => ['currency_code' => 'AUD', 'value' => '10.00'], 'supplementary_data' => ['related_ids' => ['order_id' => "TESTREF$run"]]]])]);
+curl_exec($ch); $hook = curl_getinfo($ch, CURLINFO_RESPONSE_CODE); curl_close($ch);
+check('Y32', 'A forged (unsigned) PayPal webhook cannot mark an order paid', $hook !== 200 && $orderRow($pp)['payment_status'] === 'unpaid', "status $hook");
+$r = $d->get('order_detail.php?id=' . $pp);
+check('Y33', 'Unpaid PayPal order links back to PayPal to finish paying', str_contains($r['body'], 'paypal.com/checkoutnow?token=TESTREF' . $run));
+$r = $d->submit('account.php', ['action' => 'export']);
+$json = json_decode($r['body'], true);
+check('Y34', 'Data export includes how each order was paid', isset($json['orders'][0]['payment_status'], $json['orders'][0]['payment_provider']));
+
+/* ---------------------------------------------------------------- */
 heading('Password reset and privacy');
 $reset = new Browser($base);
 $reset->submit('forgot_password.php', ['email' => $emailB]);

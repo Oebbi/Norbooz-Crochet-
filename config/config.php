@@ -47,6 +47,8 @@ $defaults = [
     'PAYPAL_CLIENT_SECRET' => '',
     'PAYPAL_WEBHOOK_ID' => '',
     'PAYPAL_MODE' => 'sandbox',
+    // An online order that is still unpaid after this many hours is cancelled and its stock released.
+    'PAYMENT_EXPIRY_HOURS' => 24,
 
     // Security
     'SESSION_IDLE_MINUTES' => 30,

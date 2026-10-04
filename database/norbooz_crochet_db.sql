@@ -1,4 +1,4 @@
--- Norbooz Crochet Web Information System - full database (version 6)
+-- Norbooz Crochet Web Information System - full database (schema version 7, application version 3.5)
 -- Fresh install: import this file in phpMyAdmin (Import tab) BEFORE opening the website.
 -- WARNING: this recreates every table. To keep an existing database, run upgrade.php instead (see the Installation Manual).
 
@@ -83,7 +83,7 @@ CREATE TABLE orders (
     delivery_fee DECIMAL(10,2) NOT NULL DEFAULT 0,
     total_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
     payment_status ENUM('unpaid','paid','manual','failed','refunded') NOT NULL DEFAULT 'manual',
-    payment_provider ENUM('paypal','manual','card') NOT NULL DEFAULT 'manual',
+    payment_provider ENUM('paypal','manual','card','demo') NOT NULL DEFAULT 'manual',
     payment_reference VARCHAR(255) NULL,
     paid_at DATETIME NULL,
     phone VARCHAR(30) NOT NULL,

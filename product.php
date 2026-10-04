@@ -58,6 +58,7 @@ page_header($product['name'], mb_substr((string)$product['description'], 0, 155)
             <div><dt>Theme</dt><dd><?= e($product['theme']) ?></dd></div>
             <div><dt>Item dimensions (L x W x H)</dt><dd><?= e($product['dimensions']) ?></dd></div>
         </dl>
+        <p class="small-text">Sizes are approximate. Every piece is made by hand, so measurements and shades can vary slightly from the photo.</p>
         <h2 class="product-specs-heading">About this item</h2>
         <ul class="product-about">
             <?php foreach ($descriptionItems as $descriptionItem): ?>
