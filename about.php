@@ -34,7 +34,7 @@ page_header('About & FAQ', 'About Norbooz Crochet: handmade crochet pieces from 
         </details>
         <details>
             <summary>Can I cancel an order?</summary>
-            <p>Manual-payment orders can be cancelled while they are still <em>Pending</em> from <a href="<?= e(url('my_orders.php')) ?>">My orders</a>. For an order paid online, please email us so we can safely handle any refund. Once we start making an order, please contact us.</p>
+            <p>Orders that have not been paid yet can be cancelled while they are still <em>Pending</em> from <a href="<?= e(url('my_orders.php')) ?>">My orders</a>. For an order paid online, please email us so we can safely handle any refund. Once we start making an order, please contact us.</p>
         </details>
         <details>
             <summary>How do I care for crochet items?</summary>
