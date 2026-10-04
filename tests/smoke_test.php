@@ -65,6 +65,19 @@ $tests['Public hostname never exposes local demo through a proxy'] = !isset($pro
 $tests['HTTP localhost is allowed for private test payment return URLs'] = is_local_http_url('http://localhost/norbooz_crochet') && is_local_http_url('http://127.0.0.1:8080/shop');
 $tests['Public HTTP is not accepted as a local test payment URL'] = !is_local_http_url('http://shop.example.com') && !is_local_http_url('https://localhost/shop');
 
+$tests['Payment samples share the simulator provider'] = payment_provider_for('demo_apple_pay') === 'demo' && payment_provider_for('paypal') === 'paypal' && payment_provider_for('manual') === 'manual';
+$tests['Payment status wording is customer friendly'] = payment_status_label('unpaid') === 'Awaiting payment' && payment_status_label('manual') === 'Arranged by email' && payment_status_label('refunded') === 'Refunded';
+$_SESSION = [];
+$cancelToken = payment_cancel_token(42);
+$tests['Cancel-link token is random, stable per order and checked exactly'] = strlen($cancelToken) === 32 && payment_cancel_token(42) === $cancelToken
+    && valid_payment_cancel_token(42, $cancelToken) && !valid_payment_cancel_token(42, '') && !valid_payment_cancel_token(43, $cancelToken);
+$unpaidPayPal = ['order_id' => 7, 'status' => 'pending', 'payment_status' => 'unpaid', 'payment_provider' => 'paypal', 'payment_reference' => 'ABC 123'];
+$tests['Unpaid PayPal order resumes on the PayPal sandbox host'] = payment_resume_url($unpaidPayPal) === 'https://www.sandbox.paypal.com/checkoutnow?token=ABC%20123';
+$tests['Paid, cancelled or manual orders have no pay link'] = payment_resume_url(['payment_status' => 'paid'] + $unpaidPayPal) === ''
+    && payment_resume_url(['status' => 'cancelled'] + $unpaidPayPal) === '' && payment_resume_url(['payment_provider' => 'manual'] + $unpaidPayPal) === '';
+$tests['Unpaid orders expire after a positive number of hours'] = payment_expiry_hours() >= 1;
+$tests['PayPal is not offered until all three credentials are set'] = !isset($localPaymentOptions['paypal']) || (PAYPAL_CLIENT_ID !== '' && PAYPAL_CLIENT_SECRET !== '' && PAYPAL_WEBHOOK_ID !== '');
+
 $failed = 0;
 foreach ($tests as $name => $ok) {
     echo ($ok ? '[PASS] ' : '[FAIL] ') . $name . PHP_EOL;
