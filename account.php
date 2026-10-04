@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Australian Privacy Principle 12: people can access the personal information held about them.
     if ($action === 'export') {
-        $orders = $pdo->prepare('SELECT order_id, order_date, status, subtotal_amount, delivery_method, delivery_fee, total_amount, phone, address, custom_note FROM orders WHERE user_id = ? ORDER BY order_id');
+        $orders = $pdo->prepare('SELECT order_id, order_date, status, subtotal_amount, delivery_method, delivery_fee, total_amount, payment_provider, payment_status, paid_at, phone, address, custom_note FROM orders WHERE user_id = ? ORDER BY order_id');
         $orders->execute([$user['user_id']]);
         $orders = $orders->fetchAll();
         $itemsStmt = $pdo->prepare('SELECT p.name, oi.quantity, oi.unit_price FROM order_items oi JOIN products p ON p.product_id = oi.product_id WHERE oi.order_id = ?');

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config/functions.php';
+require_once __DIR__ . '/config/payments.php';
 require_admin();
 
 $status = (string)($_GET['status'] ?? '');
@@ -24,7 +25,7 @@ if ($search !== '') {
 }
 $whereSql = implode(' AND ', $where);
 
-$sql = "SELECT o.order_id, o.order_date, o.status, o.total_amount, o.delivery_method, o.phone, o.address, o.custom_note,
+$sql = "SELECT o.order_id, o.order_date, o.status, o.total_amount, o.delivery_method, o.phone, o.address, o.custom_note, o.payment_status, o.payment_provider,
                u.full_name, u.email,
                GROUP_CONCAT(CONCAT(p.name, ' x ', oi.quantity) ORDER BY oi.order_item_id SEPARATOR ', ') AS items
         FROM orders o
@@ -32,7 +33,7 @@ $sql = "SELECT o.order_id, o.order_date, o.status, o.total_amount, o.delivery_me
         JOIN order_items oi ON oi.order_id = o.order_id
         JOIN products p ON p.product_id = oi.product_id
         WHERE $whereSql
-        GROUP BY o.order_id, o.order_date, o.status, o.total_amount, o.delivery_method, o.phone, o.address, o.custom_note, u.full_name, u.email
+        GROUP BY o.order_id, o.order_date, o.status, o.total_amount, o.delivery_method, o.phone, o.address, o.custom_note, o.payment_status, o.payment_provider, u.full_name, u.email
         ORDER BY o.order_date DESC, o.order_id DESC";
 $stmt = db()->prepare($sql);
 $stmt->execute($params);
@@ -43,10 +44,10 @@ if (($_GET['export'] ?? '') === 'csv') {
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="norbooz-orders-' . date('Ymd') . '.csv"');
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['Order', 'Date', 'Status', 'Customer', 'Email', 'Items', 'Delivery', 'Total'], ',', '"', '\\');
+    fputcsv($out, ['Order', 'Date', 'Status', 'Customer', 'Email', 'Items', 'Delivery', 'Total', 'Payment method', 'Payment status'], ',', '"', '\\');
     foreach ($orders as $order) {
         // Prefix cells that start with formula characters so spreadsheets do not execute them.
-        $row = [$order['order_id'], $order['order_date'], $order['status'], $order['full_name'], $order['email'], $order['items'], $order['delivery_method'], $order['total_amount']];
+        $row = [$order['order_id'], $order['order_date'], $order['status'], $order['full_name'], $order['email'], $order['items'], $order['delivery_method'], $order['total_amount'], $order['payment_provider'], $order['payment_status']];
         $row = array_map(fn($v) => preg_match('/^[=+\-@\t\r]/', (string)$v) ? "'" . $v : $v, $row);
         fputcsv($out, $row, ',', '"', '\\');
     }
@@ -84,7 +85,7 @@ $filters = ['' => 'All', 'active' => 'Open', 'pending' => 'Pending', 'in_progres
                 <td><?= e($order['items']) ?><?php if ($order['custom_note']): ?><div class="small-text">Note: <?= e($order['custom_note']) ?></div><?php endif; ?></td>
                 <td><?= $order['delivery_method'] === 'pickup' ? 'Pickup' : 'Post' ?></td>
                 <td><?= money($order['total_amount']) ?></td>
-                <td><?= status_badge($order['status']) ?></td>
+                <td><?= status_badge($order['status']) ?><?php if ($order['payment_provider'] !== 'manual'): ?><br><span class="small-text"><?= e(payment_status_label((string)$order['payment_status'])) ?> online</span><?php endif; ?></td>
                 <td><a class="button button-small button-secondary" href="<?= e(url('admin_order.php?id=' . (int)$order['order_id'])) ?>">Manage</a></td>
             </tr>
         <?php endforeach; ?>

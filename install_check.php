@@ -18,7 +18,8 @@ $add('PDO MySQL extension', extension_loaded('pdo_mysql'), 'Enable extension=pdo
 $onlinePaymentsConfigured = PAYPAL_CLIENT_ID !== '' && PAYPAL_CLIENT_SECRET !== '';
 $add('cURL extension for online payments', !$onlinePaymentsConfigured || extension_loaded('curl'), 'Enable extension=curl in php.ini and restart Apache.', !$onlinePaymentsConfigured);
 $paymentCredentialsReady = PAYPAL_CLIENT_ID !== '' && PAYPAL_CLIENT_SECRET !== '' && PAYPAL_WEBHOOK_ID !== '';
-$add('HTTPS public URL for hosted payments', !$paymentCredentialsReady || str_starts_with(APP_URL, 'https://'), 'Set APP_URL to the public HTTPS address configured with PayPal.', !$paymentCredentialsReady);
+$localSandbox = PAYPAL_MODE !== 'live' && (is_local_http_url(APP_URL) || (APP_URL === '' && is_local_request()));
+$add('HTTPS public URL for hosted payments', !$paymentCredentialsReady || str_starts_with(APP_URL, 'https://') || $localSandbox, 'Set APP_URL to the public HTTPS address configured with PayPal. (http://localhost is accepted only in sandbox mode.)', !$paymentCredentialsReady);
 $add('mbstring extension', extension_loaded('mbstring'), 'Enable extension=mbstring in php.ini.');
 $add('fileinfo extension (checks uploaded files)', extension_loaded('fileinfo'), 'Enable extension=fileinfo in php.ini.', true);
 $add('GD extension (resizes uploaded photos)', extension_loaded('gd'), 'Enable extension=gd in php.ini, then restart Apache. Without it, uploads are stored at full size.', true);
@@ -45,12 +46,12 @@ try {
         $pdo->query('SELECT brand, age_range, colour, theme, dimensions FROM products LIMIT 1');
         $providerColumn = $pdo->query("SHOW COLUMNS FROM orders LIKE 'payment_provider'")->fetch();
         $providerType = (string)($providerColumn['Type'] ?? '');
-        if (!str_contains($providerType, "'card'") || str_contains($providerType, "'stripe'")) {
-            throw new RuntimeException('Payment provider schema needs version 6 migration.');
+        if (!str_contains($providerType, "'card'") || !str_contains($providerType, "'demo'") || str_contains($providerType, "'stripe'")) {
+            throw new RuntimeException('Payment provider schema needs the version 7 migration.');
         }
-        $add('Database is version 6', true);
+        $add('Database schema is version 7', true);
     } catch (Throwable $ex) {
-        $add('Database is version 6', false, 'Back up the database, then open upgrade.php to update the payment provider schema.');
+        $add('Database schema is version 7', false, 'Back up the database, then open upgrade.php to update the payment provider schema.');
     }
     $admins = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
     $add('Administrator account exists', $admins > 0, 'Re-import the database file.');

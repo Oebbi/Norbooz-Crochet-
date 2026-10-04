@@ -1,6 +1,6 @@
 <?php
 /**
- * Upgrades existing databases to version 6 without deleting customers, products or order history.
+ * Upgrades existing databases to schema version 7 without deleting customers, products or order history.
  * Works on MariaDB (XAMPP) and MySQL 8. Safe to run more than once: each change is only made if needed.
  *
  * Run it once after copying the new files:
@@ -236,7 +236,11 @@ if ($run) {
             $pdo->exec("ALTER TABLE orders MODIFY payment_provider $interimEnum NOT NULL DEFAULT 'manual'");
         }
 
-        $legacyCardOrders = $pdo->query("SELECT order_id, user_id, status, payment_status FROM orders WHERE payment_provider = 'stripe' ORDER BY order_id")->fetchAll();
+        // Only look for old Stripe orders if the column still knows that value (stricter servers reject the comparison otherwise).
+        $hasStripe = str_contains($providerType, "'stripe'");
+        $legacyCardOrders = $hasStripe
+            ? $pdo->query("SELECT order_id, user_id, status, payment_status FROM orders WHERE payment_provider = 'stripe' ORDER BY order_id")->fetchAll()
+            : [];
         $adminId = (int)$pdo->query("SELECT user_id FROM users WHERE role = 'admin' ORDER BY user_id LIMIT 1")->fetchColumn();
         $cancelledLegacyOrders = 0;
         foreach ($legacyCardOrders as $legacyOrder) {
@@ -266,11 +270,19 @@ if ($run) {
         if ($cancelledLegacyOrders > 0) {
             $log[] = "Cancelled $cancelledLegacyOrders unpaid card test order(s) and returned reserved stock";
         }
-        $pdo->exec("UPDATE orders SET payment_provider = 'card', payment_reference = NULL WHERE payment_provider = 'stripe'");
+        if ($hasStripe) {
+            $pdo->exec("UPDATE orders SET payment_provider = 'card', payment_reference = NULL WHERE payment_provider = 'stripe'");
+        }
         $providerColumn = $pdo->query("SHOW COLUMNS FROM orders LIKE 'payment_provider'")->fetch();
         if ($providerColumn && (str_contains((string)$providerColumn['Type'], "'stripe'") || !str_contains((string)$providerColumn['Type'], "'card'"))) {
             $pdo->exec("ALTER TABLE orders MODIFY payment_provider ENUM('paypal','manual','card') NOT NULL DEFAULT 'manual'");
             $log[] = 'Removed the retired online card provider from the order schema';
+        }
+        // Schema version 7: the localhost payment simulator stores its orders with the "demo" provider.
+        $providerColumn = $pdo->query("SHOW COLUMNS FROM orders LIKE 'payment_provider'")->fetch();
+        if ($providerColumn && !str_contains((string)$providerColumn['Type'], "'demo'")) {
+            $pdo->exec("ALTER TABLE orders MODIFY payment_provider ENUM('paypal','manual','card','demo') NOT NULL DEFAULT 'manual'");
+            $log[] = 'Added the payment simulator provider to the order schema';
         }
 
         // Give existing orders a starting entry in the audit history.
@@ -317,7 +329,7 @@ if ($cli) {
 page_header('Upgrade database');
 ?>
 <section class="form-card narrow">
-    <h1>Upgrade database to version 6</h1>
+    <h1>Upgrade database to schema version 7</h1>
     <p>Updates product details, removes retired card checkout, safely cancels its unpaid test orders, and keeps customer and order history.</p>
     <?= render_errors($errors) ?>
     <?php if ($log): ?><div class="alert alert-success"><ul><?php foreach ($log as $line): ?><li><?= e($line) ?></li><?php endforeach; ?></ul></div>
