@@ -50,11 +50,13 @@ This document describes the system represented by the current project files. It 
 - **FR-23:** The system shall let a customer select pickup or postal delivery at checkout.
 - **FR-24:** The system shall calculate prices, delivery fees, and order totals on the server from current product and delivery data.
 - **FR-25:** The system shall prevent accidental duplicate order submission using a duplicate-submit token.
-- **FR-26:** The system shall support manual payment instructions and, when configured, hosted Stripe and PayPal payment flows.
+- **FR-26:** The system shall support manual payment instructions and, when configured, a hosted PayPal payment flow; on localhost it shall offer a clearly labelled payment simulator that takes no money.
 - **FR-27:** The system shall update online payment state from validated provider callbacks/webhooks rather than trusting a browser return alone.
 - **FR-28:** The system shall validate stock and create an order within a database transaction so concurrent checkouts cannot oversell stock.
 - **FR-29:** The system shall let a customer view their order history and the status/progress of an individual order.
-- **FR-30:** The system shall let a customer cancel an order while its status is pending.
+- **FR-30:** The system shall let a customer cancel an order while its status is pending, unless it has already been paid online.
+- **FR-44:** The system shall let a customer finish paying or cancel an online order that is still unpaid, and shall cancel unpaid online orders automatically after a configurable time so reserved stock is released.
+- **FR-45:** The system shall let an administrator cancel an unpaid online order and record a refund for a paid online order, with an audit-history entry and a customer email.
 
 ### Custom requests
 
@@ -114,4 +116,4 @@ Competitor feature pages: [Etsy crochet marketplace](https://www.etsy.com/market
 
 ## Traceability and verification
 
-FR-01 through FR-42 are derived from the current README, database schema, and customer administration page. Verify each requirement against the named workflow before using this list as a formal acceptance-test baseline. Payment-provider features require valid live configuration; localhost demo payment screens do not charge money or create paid orders. Accessibility, privacy, and security are cross-cutting constraints described in the project README and are not duplicated as separate functional requirements here.
+FR-01 through FR-45 are derived from the current README, database schema, and customer administration page. Verify each requirement against the named workflow before using this list as a formal acceptance-test baseline. Payment-provider features require valid live configuration; localhost demo payment screens do not charge money or create paid orders. Accessibility, privacy, and security are cross-cutting constraints described in the project README and are not duplicated as separate functional requirements here.
