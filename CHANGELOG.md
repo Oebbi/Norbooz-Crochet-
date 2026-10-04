@@ -1,5 +1,35 @@
 # Changelog
 
+Application versions (3.x) describe the website. The database has its own **schema version**, shown by
+`install_check.php`: application 3.3 = schema 4, 3.4 = schema 5 and 6, 3.5 = schema 7.
+
+## Version 3.5 (October 2026)
+
+### Fixed
+- Unit tests crashed with "undefined function is_local_http_url()"; the function now exists and all 43 unit tests run
+- PayPal checkout could never leave the site in Chrome or Edge: the Content-Security-Policy `form-action 'self'` blocked
+  the redirect after the checkout form. PayPal's two checkout hosts are now allowed, and nothing else
+- An abandoned online order stayed Pending forever with its stock reserved: neither the customer nor the owner could cancel it
+- The PayPal cancel link changed data from a plain GET request; it now needs a one-time token (CSRF)
+- On phones the product photo slid over the product name (a leftover `top: 100px` offset); the photo display itself is unchanged
+- The `refunded` payment status existed in the database but nothing could set it
+- Social media links carried personal share-tracking codes
+- Privacy page, README and requirements still named Stripe after it was removed
+
+### Added
+- Payment simulator on localhost: the Apple Pay / Afterpay / PayPal samples now create a real unpaid order and open a local
+  payment page with Approve and Cancel, using the same payment-state code as PayPal. No provider is contacted, no money is taken
+- Customers can finish paying ("Pay now") or cancel an unpaid online order; unpaid online orders expire after
+  `PAYMENT_EXPIRY_HOURS` (default 24) and release their stock
+- Owner can cancel an unpaid online order and record a refund (audit entry, stock returned, customer emailed)
+- Payment method and status in the order list, CSV export and the customer's data download; clearer payment wording
+- Monthly sales on the dashboard count only paid or manually arranged orders
+- 34 end-to-end payment tests and 7 unit tests (147 end-to-end and 43 unit tests in total)
+- Schema version 7: `demo` payment provider for simulator orders (`upgrade.php` adds it without touching data)
+
+### Removed
+- `README-local.md` (merged into `README.md`)
+
 ## Version 3.4 (October 2026)
 
 ### Product details
@@ -7,12 +37,13 @@
 - Replaced untouched starter copy with product-specific descriptions while preserving customized descriptions
 - Added product-specific colour, theme, and L x W x H details with 5+ seller guidance
 - Displayed product descriptions as an About this item bullet list; admins can enter one point per line
-- Added a version 5 database upgrade that preserves existing customers, products and orders
+- Added schema version 5 and 6 database upgrades that preserve existing customers, products and orders
+- Removed the Stripe card checkout; old card test orders are kept readable as "Card payment (retired)"
 
 ## Version 3.3 (September 2026)
 
 ### Online payments
-- Added hosted Stripe checkout for cards, Apple Pay and eligible Afterpay payments, plus PayPal Checkout
+- Added hosted Stripe checkout for cards, Apple Pay and eligible Afterpay payments, plus PayPal Checkout (Stripe was removed again in 3.4; PayPal remains)
 - Added signed payment webhooks, payment state tracking, provider returns and safe inventory release on failed or expired checkouts
 - Added a version 4 database upgrade that preserves existing orders and marks them as manual-payment orders
 
