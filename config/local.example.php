@@ -29,3 +29,4 @@ define('MAIL_MODE', 'mail');
 // define('PAYPAL_CLIENT_SECRET', '...');
 // define('PAYPAL_WEBHOOK_ID', '...');
 // define('PAYPAL_MODE', 'sandbox'); // use 'live' only after testing
+// define('PAYMENT_EXPIRY_HOURS', 24); // unpaid online orders are cancelled after this long

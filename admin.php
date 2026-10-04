@@ -1,6 +1,14 @@
 <?php
 require_once __DIR__ . '/config/functions.php';
+require_once __DIR__ . '/config/payments.php';
 require_admin();
+
+// Abandoned online checkouts: release their stock when the owner opens the dashboard.
+$expiredOrders = expire_unpaid_orders();
+if ($expiredOrders > 0) {
+    flash('info', $expiredOrders . ' unpaid online order' . ($expiredOrders === 1 ? ' was' : 's were') . ' cancelled automatically after ' . payment_expiry_hours() . ' hours and the items returned to stock.');
+    redirect('admin.php');
+}
 
 $pdo = db();
 $low = (int)LOW_STOCK_LEVEL;
@@ -11,8 +19,8 @@ $stats = $pdo->query(
         (SELECT COUNT(*) FROM orders WHERE status IN ('in_progress','ready')) AS in_work,
         (SELECT COUNT(*) FROM custom_requests WHERE status IN ('new','reviewing')) AS open_requests,
         (SELECT COUNT(*) FROM products WHERE is_active = 1 AND stock_qty <= $low) AS low_stock,
-        (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE status <> 'cancelled' AND order_date >= DATE_FORMAT(NOW(), '%Y-%m-01')) AS month_sales,
-        (SELECT COUNT(*) FROM orders WHERE status <> 'cancelled' AND order_date >= DATE_FORMAT(NOW(), '%Y-%m-01')) AS month_orders,
+        (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE status <> 'cancelled' AND payment_status IN ('manual','paid') AND order_date >= DATE_FORMAT(NOW(), '%Y-%m-01')) AS month_sales,
+        (SELECT COUNT(*) FROM orders WHERE status <> 'cancelled' AND payment_status IN ('manual','paid') AND order_date >= DATE_FORMAT(NOW(), '%Y-%m-01')) AS month_orders,
         (SELECT COUNT(*) FROM users WHERE role = 'customer' AND is_deleted = 0) AS customers"
 )->fetch();
 

@@ -1,11 +1,12 @@
 <?php
 require_once __DIR__ . '/config/functions.php';
+require_once __DIR__ . '/config/payments.php';
 require_customer();
 
 $userId = current_user()['user_id'];
 
 $orders = db()->prepare(
-    "SELECT o.order_id, o.order_date, o.status, o.total_amount, o.delivery_method,
+    "SELECT o.order_id, o.order_date, o.status, o.total_amount, o.delivery_method, o.payment_status, o.payment_provider,
             COUNT(oi.order_item_id) AS line_count, COALESCE(SUM(oi.quantity), 0) AS item_count,
             MIN(p.image_path) AS image_path, MIN(p.category) AS category,
             GROUP_CONCAT(p.name ORDER BY oi.order_item_id SEPARATOR ', ') AS item_names
@@ -13,7 +14,7 @@ $orders = db()->prepare(
      JOIN order_items oi ON oi.order_id = o.order_id
      JOIN products p ON p.product_id = oi.product_id
      WHERE o.user_id = ?
-     GROUP BY o.order_id, o.order_date, o.status, o.total_amount, o.delivery_method
+     GROUP BY o.order_id, o.order_date, o.status, o.total_amount, o.delivery_method, o.payment_status, o.payment_provider
      ORDER BY o.order_date DESC, o.order_id DESC"
 );
 $orders->execute([$userId]);
@@ -49,7 +50,7 @@ page_header('My orders');
                         <span class="small-text"><?= e(format_date($order['order_date'], false)) ?> &middot; <?= (int)$order['item_count'] ?> item<?= (int)$order['item_count'] === 1 ? '' : 's' ?> &middot; <?= $order['delivery_method'] === 'pickup' ? 'Pickup' : 'Post' ?></span>
                         <span class="small-text truncate"><?= e($order['item_names']) ?></span>
                     </div>
-                    <div class="order-card-end"><?= status_badge($order['status']) ?><strong><?= money($order['total_amount']) ?></strong></div>
+                    <div class="order-card-end"><?= status_badge($order['status']) ?><?php if ($order['payment_provider'] !== 'manual' && $order['status'] === 'pending' && $order['payment_status'] === 'unpaid'): ?><span class="small-text">Awaiting payment</span><?php endif; ?><strong><?= money($order['total_amount']) ?></strong></div>
                 </a>
             <?php endforeach; ?>
         </div>

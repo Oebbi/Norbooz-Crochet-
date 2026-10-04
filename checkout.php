@@ -46,7 +46,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!array_key_exists($form['payment_method'], $paymentOptions)) {
         $errors[] = 'Choose an available payment method.';
     }
-        $isDemoPayment = is_demo_payment_method($form['payment_method']);
+    // The three local samples share one "demo" provider (the payment simulator).
+    $provider = payment_provider_for($form['payment_method']);
     if (!valid_phone($form['phone'])) {
         $errors[] = 'Enter a contact phone number (8-20 digits).';
     }
@@ -58,15 +59,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     if (!isset($_POST['accept_terms'])) {
         $errors[] = 'Please confirm you have read how payment and delivery work.';
-    }
-
-    if (!$errors && $isDemoPayment) {
-        $feeCents = delivery_fee_cents($form['delivery_method'], $subtotal);
-        $_SESSION['payment_demo'] = [
-            'method' => $form['payment_method'],
-            'total_cents' => $subtotal + $feeCents,
-        ];
-        redirect('payment_demo.php');
     }
 
     if (!$errors) {
@@ -103,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  VALUES (?, NOW(), 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )->execute([
                 $user['user_id'], cents_to_decimal($subtotalCents), $form['delivery_method'], cents_to_decimal($feeCents),
-                cents_to_decimal($totalCents), $form['payment_method'] === 'manual' ? 'manual' : 'unpaid', $form['payment_method'],
+                cents_to_decimal($totalCents), $provider === 'manual' ? 'manual' : 'unpaid', $provider,
                 $form['phone'], $address, $form['custom_note'] !== '' ? $form['custom_note'] : null,
             ]);
             $orderId = (int)$pdo->lastInsertId();
@@ -130,12 +122,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (!$errors) {
-            if ($form['payment_method'] !== 'manual') {
+            if ($provider !== 'manual') {
                 try {
-                    $checkout = create_payment_session($form['payment_method'], $orderId, $totalCents, (string)$profile['email']);
-                    store_payment_reference($orderId, $form['payment_method'], $checkout['reference']);
+                    $checkout = create_payment_session($provider, $orderId, $totalCents, (string)$profile['email']);
+                    store_payment_reference($orderId, $provider, $checkout['reference']);
+                    if ($provider === 'demo') {
+                        $_SESSION['payment_demo_label'][$orderId] = demo_payment_labels()[$form['payment_method']] ?? 'Sample payment';
+                    }
                     unset($_SESSION['checkout_token']);
                     cart_clear();
+                    // Remember contact details for next time if the customer's profile was empty.
+                    if ($profile['phone'] === '' || $profile['address'] === '') {
+                        db()->prepare("UPDATE users SET phone = IF(phone = '', ?, phone), address = IF(address = '', ?, address) WHERE user_id = ?")
+                            ->execute([$form['phone'], $form['address'], $user['user_id']]);
+                    }
                     header('Location: ' . $checkout['url']);
                     exit;
                 } catch (Throwable $ex) {
@@ -201,7 +201,7 @@ page_header('Checkout');
             <?php foreach ($paymentOptions as $method => $label): ?>
                 <label class="radio-card payment-radio-card"><input type="radio" name="payment_method" value="<?= e($method) ?>" <?= $form['payment_method'] === $method ? 'checked' : '' ?> required>
                     <span class="payment-option-icon"><?= payment_icon($method) ?></span>
-                    <span class="payment-option-copy"><strong><?= e($label) ?></strong><span class="small-text"><?= $method === 'manual' ? 'We will email payment instructions after your order.' : (str_starts_with($method, 'demo_') ? 'Local sample only. No payment will be taken.' : 'You will pay securely through PayPal.') ?></span></span></label>
+                    <span class="payment-option-copy"><strong><?= e($label) ?></strong><span class="small-text"><?= $method === 'manual' ? 'We will email payment instructions after your order.' : (str_starts_with($method, 'demo_') ? 'Payment simulator, shown on localhost only. No money is taken.' : 'You will pay securely through PayPal.') ?></span></span></label>
             <?php endforeach; ?>
         </fieldset>
 

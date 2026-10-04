@@ -1,10 +1,28 @@
 <?php
+/**
+ * Online payments.
+ *
+ * - "manual":  PayID / bank transfer, confirmed by the owner (no online payment).
+ * - "paypal":  hosted PayPal Checkout. Offered only when credentials are set in config/local.php.
+ * - "demo":    a payment simulator that is offered ONLY when the site is opened on localhost.
+ *              It runs the same order and payment-state code as PayPal (unpaid -> paid / failed),
+ *              but no provider is contacted and no money moves. It exists so the complete
+ *              online-payment life cycle can be demonstrated and tested on XAMPP.
+ *
+ * Card details are never entered on, sent to or stored by this website.
+ */
+
+/** Hours an online order may stay unpaid before its stock is released automatically. */
+function payment_expiry_hours(): int
+{
+    return defined('PAYMENT_EXPIRY_HOURS') ? max(1, (int)PAYMENT_EXPIRY_HOURS) : 24;
+}
 
 function online_payment_options(): array
 {
     $options = ['manual' => 'PayID or bank transfer'];
     if (is_payment_demo_request()) {
-        return $options + [
+        $options += [
             'demo_apple_pay' => 'Apple Pay sample (no charge)',
             'demo_afterpay' => 'Afterpay sample (no charge)',
             'demo_paypal' => 'PayPal sample (no charge)',
@@ -19,6 +37,83 @@ function online_payment_options(): array
 function is_demo_payment_method(string $method): bool
 {
     return is_payment_demo_request() && in_array($method, ['demo_apple_pay', 'demo_afterpay', 'demo_paypal'], true);
+}
+
+/** Database provider value for a checkout choice (the three samples share the "demo" provider). */
+function payment_provider_for(string $method): string
+{
+    return str_starts_with($method, 'demo_') ? 'demo' : $method;
+}
+
+function payment_provider_label(string $provider): string
+{
+    return match ($provider) {
+        'paypal' => 'PayPal',
+        'demo' => 'Simulated online payment (local demo, no money taken)',
+        'card' => 'Card payment (retired)',
+        default => 'PayID or bank transfer',
+    };
+}
+
+/** Customer-friendly wording for orders.payment_status. */
+function payment_status_label(string $status): string
+{
+    return match ($status) {
+        'unpaid' => 'Awaiting payment',
+        'paid' => 'Paid',
+        'failed' => 'Not paid',
+        'refunded' => 'Refunded',
+        default => 'Arranged by email',
+    };
+}
+
+function demo_payment_labels(): array
+{
+    return ['demo_apple_pay' => 'Apple Pay', 'demo_afterpay' => 'Afterpay', 'demo_paypal' => 'PayPal'];
+}
+
+/** True for http://localhost or http://127.0.0.1 addresses, which PayPal sandbox accepts as return URLs. */
+function is_local_http_url(string $url): bool
+{
+    $parts = parse_url($url);
+    return is_array($parts)
+        && strtolower((string)($parts['scheme'] ?? '')) === 'http'
+        && in_array(strtolower((string)($parts['host'] ?? '')), ['localhost', '127.0.0.1'], true);
+}
+
+/**
+ * One-time token that must come back on payment_cancel.php. PayPal can only send the customer
+ * back with a GET link, so this token (kept in the session) stops another website from
+ * cancelling an order by tricking a logged-in customer into opening that link (CSRF).
+ */
+function payment_cancel_token(int $orderId): string
+{
+    if (empty($_SESSION['payment_cancel'][$orderId])) {
+        $_SESSION['payment_cancel'][$orderId] = bin2hex(random_bytes(16));
+    }
+    return $_SESSION['payment_cancel'][$orderId];
+}
+
+function valid_payment_cancel_token(int $orderId, string $token): bool
+{
+    $expected = (string)($_SESSION['payment_cancel'][$orderId] ?? '');
+    return $expected !== '' && hash_equals($expected, $token);
+}
+
+/** Where an unpaid online order can be paid, or '' when it cannot be resumed. */
+function payment_resume_url(array $order): string
+{
+    if ($order['status'] !== 'pending' || $order['payment_status'] !== 'unpaid' || (string)$order['payment_reference'] === '') {
+        return '';
+    }
+    if ($order['payment_provider'] === 'demo') {
+        return is_payment_demo_request() ? url('payment_demo.php?order_id=' . (int)$order['order_id']) : '';
+    }
+    if ($order['payment_provider'] === 'paypal') {
+        $host = PAYPAL_MODE === 'live' ? 'www.paypal.com' : 'www.sandbox.paypal.com';
+        return 'https://' . $host . '/checkoutnow?token=' . rawurlencode((string)$order['payment_reference']);
+    }
+    return '';
 }
 
 function is_payment_demo_request(): bool
@@ -103,6 +198,12 @@ function paypal_request(string $method, string $path, array $payload = []): arra
 
 function create_payment_session(string $provider, int $orderId, int $amountCents, string $email): array
 {
+    if ($provider === 'demo') {
+        if (!is_payment_demo_request()) {
+            throw new RuntimeException('The payment simulator is only available on localhost.');
+        }
+        return ['reference' => 'DEMO-' . strtoupper(bin2hex(random_bytes(10))), 'url' => url('payment_demo.php?order_id=' . $orderId)];
+    }
     if ($provider === 'paypal') {
         $order = paypal_request('POST', 'checkout/orders', [
             'intent' => 'CAPTURE',
@@ -116,7 +217,7 @@ function create_payment_session(string $provider, int $orderId, int $amountCents
                 'brand_name' => APP_NAME,
                 'user_action' => 'PAY_NOW',
                 'return_url' => absolute_url('payment_return.php?provider=paypal&order_id=' . $orderId),
-                'cancel_url' => absolute_url('payment_cancel.php?provider=paypal&order_id=' . $orderId),
+                'cancel_url' => absolute_url('payment_cancel.php?provider=paypal&order_id=' . $orderId . '&ct=' . payment_cancel_token($orderId)),
             ],
         ]);
         foreach (($order['links'] ?? []) as $link) {
@@ -253,7 +354,7 @@ function notify_order_paid(array $order, int $orderId): void
 {
     $message = "Hi {$order['full_name']},\n\nPayment for order #$orderId has been received. We will email you as your order progresses.\n\nTotal: " . money($order['total_amount']) . "\n\nTrack your order: " . absolute_url('order_detail.php?id=' . $orderId);
     send_email($order['email'], "Payment received for order #$orderId", $message);
-    send_email(SHOP_EMAIL, "Payment received for order #$orderId", $message);
+    send_email(SHOP_EMAIL, "Payment received for order #$orderId", "Order #$orderId from {$order['full_name']} has been paid online (" . money($order['total_amount']) . ").\n\nPhone: {$order['phone']}\nDeliver to: {$order['address']}\nNote: " . ($order['custom_note'] ?: '-') . "\n\nManage: " . absolute_url('admin_order.php?id=' . $orderId));
 }
 
 function mark_order_paid(int $orderId, string $provider, string $reference): bool
@@ -287,4 +388,98 @@ function mark_order_paid(int $orderId, string $provider, string $reference): boo
 
     notify_order_paid($order, $orderId);
     return true;
+}
+
+/**
+ * Admin: record that an online payment was refunded at the provider.
+ * An open order is cancelled (stock returns); a completed order only has its payment marked refunded.
+ */
+function mark_order_refunded(int $orderId, int $adminId, string $note): void
+{
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare('SELECT status, payment_status, payment_provider FROM orders WHERE order_id = ? FOR UPDATE');
+        $stmt->execute([$orderId]);
+        $order = $stmt->fetch();
+        if (!$order) {
+            throw new RuntimeException('Order not found.');
+        }
+        if ($order['payment_provider'] === 'manual' || $order['payment_status'] !== 'paid') {
+            throw new RuntimeException('Only an order that was paid online can be marked as refunded.');
+        }
+        $note = 'Payment refunded' . ($note !== '' ? ': ' . $note : '');
+        if (in_array($order['status'], ['pending', 'in_progress', 'ready'], true)) {
+            change_order_status($pdo, $orderId, 'cancelled', $adminId, $note);
+        } else {
+            $pdo->prepare('INSERT INTO order_status_history (order_id, old_status, new_status, changed_by, note) VALUES (?, ?, ?, ?, ?)')
+                ->execute([$orderId, $order['status'], $order['status'], $adminId, mb_substr($note, 0, 255)]);
+        }
+        $pdo->prepare("UPDATE orders SET payment_status = 'refunded', updated_at = NOW() WHERE order_id = ?")->execute([$orderId]);
+        $pdo->commit();
+    } catch (Throwable $ex) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $ex;
+    }
+}
+
+/** Admin: cancel an online order that was never paid, returning its stock. */
+function admin_cancel_unpaid_order(int $orderId, int $adminId, string $note): void
+{
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare('SELECT status, payment_status, payment_provider FROM orders WHERE order_id = ? FOR UPDATE');
+        $stmt->execute([$orderId]);
+        $order = $stmt->fetch();
+        if (!$order || $order['payment_provider'] === 'manual' || $order['payment_status'] !== 'unpaid' || $order['status'] !== 'pending') {
+            throw new RuntimeException('Only a pending online order that is still unpaid can be cancelled this way.');
+        }
+        change_order_status($pdo, $orderId, 'cancelled', $adminId, $note !== '' ? $note : 'Unpaid online order cancelled by the shop');
+        $pdo->prepare("UPDATE orders SET payment_status = 'failed', updated_at = NOW() WHERE order_id = ?")->execute([$orderId]);
+        $pdo->commit();
+    } catch (Throwable $ex) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $ex;
+    }
+}
+
+/**
+ * Release stock held by online orders that were never paid (abandoned checkouts).
+ * Runs when the owner opens the admin area, so no scheduled task is needed on shared hosting.
+ * Returns the number of orders cancelled.
+ */
+function expire_unpaid_orders(?int $hours = null): int
+{
+    $hours = $hours ?? payment_expiry_hours();
+    $pdo = db();
+    $stmt = $pdo->prepare("SELECT order_id, user_id FROM orders
+                           WHERE status = 'pending' AND payment_status = 'unpaid' AND payment_provider <> 'manual'
+                             AND order_date < DATE_SUB(NOW(), INTERVAL ? HOUR) ORDER BY order_id");
+    $stmt->execute([$hours]);
+    $expired = 0;
+    foreach ($stmt->fetchAll() as $row) {
+        $pdo->beginTransaction();
+        try {
+            $check = $pdo->prepare('SELECT status, payment_status FROM orders WHERE order_id = ? FOR UPDATE');
+            $check->execute([$row['order_id']]);
+            $current = $check->fetch();
+            if ($current && $current['status'] === 'pending' && $current['payment_status'] === 'unpaid') {
+                change_order_status($pdo, (int)$row['order_id'], 'cancelled', (int)$row['user_id'], "Not paid within $hours hours; stock released automatically");
+                $pdo->prepare("UPDATE orders SET payment_status = 'failed', updated_at = NOW() WHERE order_id = ?")->execute([$row['order_id']]);
+                $expired++;
+            }
+            $pdo->commit();
+        } catch (Throwable $ex) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('Could not expire unpaid order #' . $row['order_id'] . ': ' . $ex->getMessage());
+        }
+    }
+    return $expired;
 }

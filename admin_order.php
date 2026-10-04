@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config/functions.php';
+require_once __DIR__ . '/config/payments.php';
 require_admin();
 
 $orderId = filter_var($_GET['id'] ?? $_POST['order_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
@@ -51,6 +52,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// Online payments: cancel an abandoned (unpaid) checkout, or record a refund made at the provider.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['cancel_unpaid', 'refund'], true)) {
+    $paymentNote = trim(mb_substr((string)($_POST['payment_note'] ?? ''), 0, 200));
+    try {
+        if ($_POST['action'] === 'cancel_unpaid') {
+            admin_cancel_unpaid_order($orderId, (int)current_user()['user_id'], $paymentNote);
+            flash('success', 'Unpaid order #' . $orderId . ' was cancelled and its items returned to stock.');
+        } else {
+            if (!isset($_POST['confirm_refund'])) {
+                throw new RuntimeException('Tick the box to confirm the refund has been made at the payment provider.');
+            }
+            mark_order_refunded($orderId, (int)current_user()['user_id'], $paymentNote);
+            $customer = db()->prepare('SELECT u.full_name, u.email, u.is_deleted, o.total_amount FROM orders o JOIN users u ON u.user_id = o.user_id WHERE o.order_id = ?');
+            $customer->execute([$orderId]);
+            $customer = $customer->fetch();
+            if ($customer && !(int)$customer['is_deleted']) {
+                send_email($customer['email'], "Refund for order #$orderId", "Hi {$customer['full_name']},\n\nYour payment of " . money($customer['total_amount']) . " for order #$orderId has been refunded. Refunds usually appear within 3-5 business days."
+                    . ($paymentNote !== '' ? "\n\nMessage from the maker: $paymentNote" : '') . "\n\nView your order: " . absolute_url('order_detail.php?id=' . $orderId));
+            }
+            flash('success', 'Order #' . $orderId . ' is marked as refunded and the customer was emailed.');
+        }
+        redirect('admin_order.php?id=' . $orderId);
+    } catch (Throwable $ex) {
+        $errors[] = $ex instanceof RuntimeException ? $ex->getMessage() : 'The payment could not be updated.';
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? 'status') === 'status') {
     $newStatus = (string)($_POST['status'] ?? '');
     $note = trim(mb_substr((string)($_POST['note'] ?? ''), 0, 255));
@@ -70,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? 'status') === 
             throw new RuntimeException('This order has not been paid. Complete or cancel its online checkout before changing fulfillment status.');
         }
         if ($payment['payment_provider'] !== 'manual' && $newStatus === 'cancelled') {
-            throw new RuntimeException('Cancel or refund online payments through the payment provider before changing this order.');
+            throw new RuntimeException('This order was paid online. Refund it at the payment provider, then use "Record a refund" on this page.');
         }
         $pdo->beginTransaction();
         $order = change_order_status($pdo, $orderId, $newStatus, current_user()['user_id'], $note);
@@ -178,7 +206,32 @@ admin_nav();
 
         <section class="summary-card">
             <h2>Payment</h2>
-            <p><strong><?= e(format_status($order['payment_status'])) ?></strong><br><?= e(match ($order['payment_provider']) { 'paypal' => 'PayPal', 'card' => 'Card payment (retired)', default => 'PayID or bank transfer' }) ?><?= $order['paid_at'] ? '<br>Paid ' . e(format_date($order['paid_at'])) : '' ?></p>
+            <p><strong><?= e(payment_status_label((string)$order['payment_status'])) ?></strong><br><?= e(payment_provider_label((string)$order['payment_provider'])) ?><?= $order['paid_at'] ? '<br>Paid ' . e(format_date($order['paid_at'])) : '' ?></p>
+            <?php if ($order['payment_reference']): ?><p class="small-text">Reference: <?= e($order['payment_reference']) ?></p><?php endif; ?>
+            <?php if ($order['payment_provider'] !== 'manual' && $order['payment_status'] === 'unpaid' && $order['status'] === 'pending'): ?>
+                <p class="small-text">The customer has not finished paying. The items stay reserved for <?= (int)payment_expiry_hours() ?> hours, then the order is cancelled automatically.</p>
+                <form method="post" data-confirm="Cancel unpaid order #<?= (int)$orderId ?> and return its items to stock?">
+                    <?= csrf_input() ?>
+                    <input type="hidden" name="action" value="cancel_unpaid">
+                    <input type="hidden" name="order_id" value="<?= (int)$orderId ?>">
+                    <button class="button button-secondary button-block" type="submit">Cancel unpaid order</button>
+                </form>
+            <?php elseif ($order['payment_provider'] !== 'manual' && $order['payment_status'] === 'paid'): ?>
+                <details class="danger-zone">
+                    <summary>Record a refund</summary>
+                    <p class="small-text">First refund the customer in your <?= $order['payment_provider'] === 'paypal' ? 'PayPal' : 'payment provider' ?> account. Then record it here: <?= $order['status'] === 'completed' ? 'the payment is marked refunded.' : 'the order is cancelled and its items return to stock.' ?></p>
+                    <form method="post" data-confirm="Record a refund for order #<?= (int)$orderId ?>?">
+                        <?= csrf_input() ?>
+                        <input type="hidden" name="action" value="refund">
+                        <input type="hidden" name="order_id" value="<?= (int)$orderId ?>">
+                        <label for="payment_note">Reason <span class="hint">(optional, sent to the customer)</span></label>
+                        <input id="payment_note" name="payment_note" maxlength="200">
+                        <label class="checkbox"><input type="checkbox" name="confirm_refund" value="1" required> I have refunded this payment at the provider</label>
+                        <button class="button button-danger button-block" type="submit">Record refund</button>
+                    </form>
+                </details>
+            <?php endif; ?>
+        
         </section>
 
         <?php if (in_array($order['status'], ['pending', 'in_progress', 'ready'], true)): ?>
@@ -202,7 +255,7 @@ admin_nav();
         <section class="summary-card">
             <h2>Update status</h2>
             <?php if (!$next): ?>
-                <p><?= $order['payment_provider'] !== 'manual' && $order['payment_status'] !== 'paid' ? 'Online payment must be confirmed before fulfillment can begin.' : 'This order is ' . strtolower(format_status($order['status'])) . '. No further changes are allowed.' ?></p>
+                <p><?= $order['payment_provider'] !== 'manual' && $order['payment_status'] !== 'paid' ? ($order['status'] === 'cancelled' ? 'This online order is cancelled. It cannot be re-opened; the customer can place a new order.' : 'Online payment must be confirmed before fulfillment can begin.') : 'This order is ' . strtolower(format_status($order['status'])) . '. No further changes are allowed.' ?></p>
             <?php else: ?>
                 <form method="post">
                     <?= csrf_input() ?>

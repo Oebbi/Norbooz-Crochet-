@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/config/functions.php';
+require_once __DIR__ . '/config/payments.php';
 require_customer();
 
 $user = current_user();
@@ -20,13 +21,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'cance
         if (!$ownedOrder) {
             throw new RuntimeException('Order not found.');
         }
-        if ($ownedOrder['payment_provider'] !== 'manual') {
-            throw new RuntimeException('Online payments cannot be cancelled here. Contact us if you need help with a refund.');
+        if ($ownedOrder['payment_provider'] !== 'manual' && $ownedOrder['payment_status'] !== 'unpaid') {
+            // Money has moved: only the shop can cancel, because a refund has to be made at the provider.
+            throw new RuntimeException('This order has been paid online, so it cannot be cancelled here. Contact us and we will arrange a refund.');
         }
         if ($ownedOrder['status'] !== 'pending') {
             throw new RuntimeException('This order is already being made, so it cannot be cancelled online. Please contact us.');
         }
         change_order_status($pdo, $orderId, 'cancelled', $user['user_id'], 'Cancelled by customer');
+        if ($ownedOrder['payment_provider'] !== 'manual') {
+            // An abandoned online checkout: nothing was paid, so release it completely.
+            $pdo->prepare("UPDATE orders SET payment_status = 'failed', updated_at = NOW() WHERE order_id = ? AND payment_status = 'unpaid'")->execute([$orderId]);
+        }
         $pdo->commit();
         send_email(SHOP_EMAIL, "Order #$orderId cancelled by customer", "{$user['full_name']} cancelled order #$orderId. Stock has been returned automatically.");
         flash('success', 'Order #' . $orderId . ' was cancelled.');
@@ -60,6 +66,9 @@ $history->execute([$orderId]);
 $history = $history->fetchAll();
 
 $steps = ['pending', 'in_progress', 'ready', 'completed'];
+$isOnline = $order['payment_provider'] !== 'manual';
+$awaitingPayment = $isOnline && $order['status'] === 'pending' && $order['payment_status'] === 'unpaid';
+$resumeUrl = payment_resume_url($order);
 $currentStep = array_search($order['status'], $steps, true);
 
 page_header('Order #' . $orderId);
@@ -68,13 +77,19 @@ page_header('Order #' . $orderId);
 
 <section class="page-heading">
     <h1>Order #<?= (int)$orderId ?> <?= status_badge($order['status']) ?></h1>
-    <p>Placed <?= e(format_date($order['order_date'])) ?>. <?= e(status_description($order['status'])) ?></p>
+    <p>Placed <?= e(format_date($order['order_date'])) ?>. <?= e($awaitingPayment ? 'Waiting for your online payment.' : status_description($order['status'])) ?></p>
 </section>
 
-<?php if (isset($_GET['placed']) && $order['status'] === 'pending'): ?>
+<?php if ($awaitingPayment): ?>
+    <div class="callout">
+        <h2>Payment not completed yet</h2>
+        <p>Your items are reserved for <?= (int)payment_expiry_hours() ?> hours. Finish paying to confirm the order, or cancel it to release the items.</p>
+        <?php if ($resumeUrl !== ''): ?><p><a class="button" href="<?= e($resumeUrl) ?>">Pay now</a></p><?php endif; ?>
+    </div>
+<?php elseif (isset($_GET['placed']) && $order['status'] === 'pending'): ?>
     <div class="callout">
         <h2>What happens next</h2>
-        <p><?= $order['payment_provider'] === 'manual' ? e(PAYMENT_INSTRUCTIONS) : 'Complete payment through the secure checkout to confirm your order.' ?></p>
+        <p><?= !$isOnline ? e(PAYMENT_INSTRUCTIONS) : 'Thank you, your payment has been received. We will email you as your order progresses.' ?></p>
         <p class="small-text">A confirmation has been sent to your email address.</p>
     </div>
 <?php endif; ?>
@@ -112,20 +127,23 @@ page_header('Order #' . $orderId);
         <h2>Delivery details</h2>
         <p><?= e($order['phone']) ?><br><?= nl2br(e($order['address'])) ?></p>
         <h2>Payment</h2>
-        <p><strong><?= e(format_status($order['payment_status'])) ?></strong><br><?= e(match ($order['payment_provider']) { 'paypal' => 'PayPal', 'card' => 'Card payment (retired)', default => 'PayID or bank transfer' }) ?><?= $order['paid_at'] ? '<br>Paid ' . e(format_date($order['paid_at'])) : '' ?></p>
+        <p><strong><?= e(payment_status_label((string)$order['payment_status'])) ?></strong><br><?= e(payment_provider_label((string)$order['payment_provider'])) ?><?= $order['paid_at'] ? '<br>Paid ' . e(format_date($order['paid_at'])) : '' ?></p>
         <h2>History</h2>
         <ol class="timeline">
             <?php foreach ($history as $event): ?>
                 <li><strong><?= e(format_status($event['new_status'])) ?></strong><span class="small-text"><?= e(format_date($event['changed_at'])) ?><?= $event['note'] ? ' &middot; ' . e($event['note']) : '' ?></span></li>
             <?php endforeach; ?>
         </ol>
-        <?php if ($order['status'] === 'pending' && $order['payment_provider'] === 'manual'): ?>
+        <?php if ($order['status'] === 'pending' && (!$isOnline || $awaitingPayment)): ?>
             <form method="post" data-confirm="Cancel order #<?= (int)$orderId ?>? This cannot be undone online.">
                 <?= csrf_input() ?>
                 <input type="hidden" name="action" value="cancel">
                 <input type="hidden" name="order_id" value="<?= (int)$orderId ?>">
                 <button class="button button-secondary button-block" type="submit">Cancel this order</button>
             </form>
+        <?php endif; ?>
+        <?php if ($isOnline && $order['payment_status'] === 'paid' && $order['status'] !== 'completed'): ?>
+            <p class="small-text">This order was paid online. To cancel it, email us and we will refund your payment.</p>
         <?php endif; ?>
         <p class="small-text">Questions? Email <a href="mailto:<?= e(SHOP_EMAIL) ?>?subject=Order%20%23<?= (int)$orderId ?>"><?= e(SHOP_EMAIL) ?></a> and quote order #<?= (int)$orderId ?>.</p>
     </aside>
